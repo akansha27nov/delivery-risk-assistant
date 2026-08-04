@@ -1,8 +1,8 @@
 """
 Splits loaded documents (from ingestion.py) into small chunks with metadata,
-so each chunk can be cited back to an exact location:
+carrying the "project" tag through so it can flow into Pinecone as anamespace later:
 
-  {"source": filename, "chunk_id": str, "text": str, "location": str}
+  {"source", "chunk_id", "text", "location", "project"}
 
 Two strategies:
   - CSV rows are already the right granularity -> one chunk per row.
@@ -12,7 +12,7 @@ Two strategies:
 
 MAX_CHARS = 600
 
-def _chunk_text_doc(source: str, content: str, max_chars: int = MAX_CHARS) -> list[dict]:
+def _chunk_text_doc(source: str, content: str, project: str, max_chars: int = MAX_CHARS) -> list[dict]:
     chunks = []
     current_heading = None
     buffer, buffer_len, idx = [], 0, 0
@@ -29,6 +29,7 @@ def _chunk_text_doc(source: str, content: str, max_chars: int = MAX_CHARS) -> li
                 "chunk_id": f"{source}::chunk{idx}",
                 "text": text,
                 "location": location,
+                "project": project,
             })
             idx += 1
         buffer, buffer_len = [], 0
@@ -50,7 +51,7 @@ def _chunk_text_doc(source: str, content: str, max_chars: int = MAX_CHARS) -> li
     return chunks
 
 
-def _chunk_csv_doc(source: str, rows: list[dict]) -> list[dict]:
+def _chunk_csv_doc(source: str, rows: list[dict], project: str) -> list[dict]:
     chunks = []
     for i, row in enumerate(rows):
         text = "; ".join(f"{k}: {v}" for k, v in row.items() if v)
@@ -60,6 +61,7 @@ def _chunk_csv_doc(source: str, rows: list[dict]) -> list[dict]:
             "chunk_id": f"{source}::{ticket_id}",
             "text": text,
             "location": f"{source} — row {ticket_id}",
+            "project": project,
         })
     return chunks
 
@@ -68,9 +70,9 @@ def chunk_documents(documents: list[dict], max_chars: int = MAX_CHARS) -> list[d
     all_chunks = []
     for doc in documents:
         if doc["type"] == "text":
-            all_chunks.extend(_chunk_text_doc(doc["source"], doc["content"], max_chars))
+            all_chunks.extend(_chunk_text_doc(doc["source"], doc["content"], doc["project"], max_chars))
         elif doc["type"] == "csv":
-            all_chunks.extend(_chunk_csv_doc(doc["source"], doc["rows"]))
+            all_chunks.extend(_chunk_csv_doc(doc["source"], doc["rows"], doc["project"]))
     return all_chunks
 
 
@@ -83,18 +85,12 @@ if __name__ == "__main__":
     print(f"{len(docs)} documents -> {len(chunks)} chunks\n")
 
     from collections import Counter
-    counts = Counter(c["source"] for c in chunks)
-    for source, n in counts.items():
-        print(f"  {source:<30} {n} chunks")
+    by_project = Counter(c["project"] for c in chunks)
+    for project, n in by_project.items():
+        print(f"  [{project}] {n} chunks")
 
-    print("\n--- Sample chunk (markdown, section-aware) ---")
-    sample = next(c for c in chunks if c["source"] == "nova_incident_postmortem.md")
-    print(f"chunk_id: {sample['chunk_id']}")
-    print(f"location: {sample['location']}")
-    print(f"text: {sample['text'][:200]}...")
-
-    print("\n--- Sample chunk (CSV row) ---")
+    print("\n--- Sample chunk, confirming project tag flowed through ---")
     sample = next(c for c in chunks if c["source"] == "ticket_export.csv" and "ATL-142" in c["chunk_id"])
     print(f"chunk_id: {sample['chunk_id']}")
+    print(f"project:  {sample['project']}")
     print(f"location: {sample['location']}")
-    print(f"text: {sample['text']}")

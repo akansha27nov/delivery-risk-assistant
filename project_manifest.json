@@ -1,0 +1,21 @@
+{
+  "atlas": {
+    "display_name": "Team Atlas — Rewards Partner Launch",
+    "files": [
+      "sprint_report.md",
+      "ticket_export.csv",
+      "standup_transcript.txt",
+      "stakeholder_email.md"
+    ]
+  },
+  "nova": {
+    "display_name": "Team Nova — Checkout Redesign",
+    "files": [
+      "nova_sprint_report.md",
+      "nova_incident_postmortem.md",
+      "nova_slack_thread.txt",
+      "nova_retro_notes.md",
+      "nova_exec_status_email.md"
+    ]
+  }
+}

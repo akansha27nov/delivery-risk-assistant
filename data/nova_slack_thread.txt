@@ -1,0 +1,38 @@
+#team-nova-checkout — Slack export (2026-07-22)
+
+[09:14] tom.reyes: morning team! anyone catch the game last night 😅
+
+[09:15] lena.park: don't get me started, still recovering from that finish
+
+[09:16] tom.reyes: 🤣🤣 ok anyway, standup in 15
+
+[09:31] raj.singh: hey heads up — just got off a call with the Payments platform team.
+They're deprecating the v2 Payments API on 2026-08-20. We're still mid-migration to v3
+(NOV-190) and I don't think we'll be fully cut over by then given current pace.
+
+[09:32] tom.reyes: wait, 8/20? that's before our launch. do we have a firm commitment from them
+that v2 stays up longer, or is that a hard date?
+
+[09:33] raj.singh: hard date, it's already been communicated org-wide. they said no extensions,
+it's tied to a compliance requirement on their end.
+
+[09:34] tom.reyes: ok that's a real problem, our launch is 9/1 and if v2 dies 8/20 mid-migration
+we could have a gap. let's bring this to Thursday's leadership sync
+
+[09:35] lena.park: also lol have you guys seen the new office plant situation on 3rd floor,
+someone's clearly not watering it
+
+[09:36] raj.singh: 💀💀💀 RIP plant
+
+[09:41] mia.chen: quick q — is NOV-204 (the idempotency key fix from the postmortem) being
+picked up this sprint or next? I haven't seen it assigned yet and I want to make sure it lands
+before we turn on guest checkout, since that's a new retry path
+
+[09:42] tom.reyes: good catch, it's not assigned yet, let me pull it into planning for sprint 23
+
+[10:02] lena.park: coffee run, anyone want anything?
+
+[10:03] raj.singh: flat white pls 🙏
+
+[14:20] tom.reyes: quick update — talked to Payments team lead, confirmed 8/20 is firm. we need
+a fallback plan if v3 migration isn't done by then. will raise in leadership sync

@@ -1,0 +1,10 @@
+ticket_id,summary,status,priority,assignee,created_date,last_updated,days_in_status,blocked_reason
+ATL-142,Integrate points-balance API with Rewards Partner Co.,Blocked,Critical,Jonas Weber,2026-07-08,2026-07-24,9,Waiting on API credentials from Rewards Partner Co. external team
+ATL-150,Refactor rewards calculation service,In Progress,High,Sara Klein,2026-06-29,2026-07-24,,Carried over from Sprint 13
+ATL-151,Fix points expiry edge case,In Progress,Medium,Sara Klein,2026-06-30,2026-07-24,,Carried over from Sprint 13
+ATL-155,Update rewards dashboard UI copy,Done,Low,Mo Ali,2026-07-14,2026-07-18,,
+ATL-156,Add unit tests for points ledger,Done,Medium,Mo Ali,2026-07-15,2026-07-20,,
+ATL-158,Add tiered rewards banner (new stakeholder request),In Progress,High,Priya Nair,2026-07-18,2026-07-24,,Added mid-sprint outside original planning scope
+ATL-159,Support partner co-branding on rewards page,To Do,Medium,Unassigned,2026-07-18,2026-07-18,,Added mid-sprint outside original planning scope
+ATL-160,Adjust points rounding logic for co-brand cards,To Do,Medium,Unassigned,2026-07-18,2026-07-18,,Added mid-sprint outside original planning scope
+ATL-162,Regression test suite for Rewards Partner integration,To Do,High,Unassigned,2026-07-20,2026-07-24,,Awaiting QA capacity; only one QA engineer available this sprint

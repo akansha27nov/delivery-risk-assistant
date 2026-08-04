@@ -1,0 +1,33 @@
+Team Atlas — Daily Standup
+Date: 2026-07-23
+Attendees: Priya Nair (Scrum Master), Jonas Weber, Sara Klein, Mo Ali
+
+[09:01] Priya: Morning all, let's go round. Jonas, how's ATL-142 looking?
+
+[09:01] Jonas: Still blocked. I chased Rewards Partner Co. again yesterday, no response yet. It's
+been over a week now. If we don't get the API credentials by Friday I don't think we make the
+August 14th launch date.
+
+[09:02] Priya: Understood, I'll escalate to the partner's account manager today.
+
+[09:03] Sara: On my side, ATL-150 is going okay but I lost half a day yesterday helping onboard
+the new stakeholder requests — ATL-158 and the co-branding tickets. Nobody's really re-planned
+the sprint around those, they just got dropped in.
+
+[09:04] Priya: Yeah, that came from the Product side without going through backlog grooming. I'll
+raise it with them before Sprint 15 planning.
+
+[09:05] Mo: Quick one from me — QA is really stretched. I'm the only one covering regression this
+sprint and honestly I'm not confident we'll catch everything before the partner integration goes
+out.
+
+[09:06] Priya: Noted, flagging that too.
+
+[09:07] Sara: Also — not really a standup topic, but Priya, do you have five minutes after this?
+I wanted to talk about workload. I've been putting in long evenings for three sprints straight
+now and I'm honestly starting to look around at other roles. I don't want it to become a thing,
+I just needed to say it out loud.
+
+[09:07] Priya: Of course, let's talk right after this. Thank you for telling me.
+
+[09:08] Priya: Okay, anything else? No? Let's wrap here.

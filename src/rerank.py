@@ -1,14 +1,7 @@
 """
-Phase 3, Step 2: Rerank the chunks returned by retrieval using Cohere
-Rerank, so the agent reasons over the most relevant evidence first --
-not just the highest cosine-similarity matches, which (as you saw in the
-Pinecone sanity check) can rank a "no blockers" chunk above an actual
-blocked-ticket chunk purely on surface wording overlap.
-
-Needs COHERE_API_KEY set (see .env.example).
-
-Reuse the approach from:
-  github.com/akansha27nov/first-match-is-not-right-match
+Rerank the chunks returned by retrieval using Cohere Rerank, so the agent reasons 
+over the most relevant evidence first - not just the highest cosine-similarity matches,
+which can rank a "no blockers" chunk above an actual blocked-ticket chunk purely on surface wording overlap.
 """
 
 import os

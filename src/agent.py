@@ -36,15 +36,16 @@ Hard rules:
 2. Do not invent chunk_ids. Only use chunk_ids that appear in the evidence below.
 3. A chunk that says a specific issue is CLOSED, RESOLVED, or FIXED is not a current risk.
    Do not report resolved issues as risks, even if they were serious when open.
-4. REQUIRED CHECK, every time: scan the evidence for any general status claim -- phrases
-   like "on track", "green", "no blockers", "all good", "no issues to flag". For each one you
-   find, actively check whether any OTHER chunk in the evidence describes a specific, dated
-   problem (a blocked ticket, an open incident remediation, a missed deadline) that
-   contradicts it. If you find such a contradiction, you MUST report it as one of your top
-   risks -- ranked above softer or less specific risks -- citing BOTH the status claim chunk
-   and the chunk(s) it contradicts. Do not silently resolve the contradiction in the status
-   claim's favor, and do not just report the underlying issue without naming the
-   contradiction itself as the risk.
+4. REQUIRED CHECK, every time: scan the evidence for any general status claim -- phrases like 
+   "on track", "green", "no blockers", "all good", "no issues to flag". For each one you find, 
+   actively check whether any OTHER chunk in the evidence describes a specific, dated problem 
+   (a blocked ticket, an open incident remediation, a missed deadline) that contradicts it. 
+   If you find such a contradiction, you MUST report it as one of your top risks -- ranked above 
+   softer or less specific risks -- citing BOTH the status claim chunk and the chunk(s) it 
+   contradicts. Do not silently resolve the contradiction in the status claim's favor, and do 
+   not just report the underlying issue without naming the contradiction itself as the risk. 
+   If a contradiction exists, you MUST set "is_contradiction": true in your output. Otherwise, 
+   set it to false.
 5. REQUIRED CHECK, every time: scan the evidence for new work, tickets, or requests added
    to a sprint/project OUTSIDE of original planning -- phrases like "added mid-sprint",
    "outside of planning", "wasn't part of the original plan", or a stakeholder asking for
@@ -64,11 +65,11 @@ Hard rules:
 9. Each of your risks must represent a genuinely distinct underlying issue. Do not split one
    issue across two risk entries, and do not pad a risk's citations with chunks that don't
    directly support that specific risk's claim just because they're topically related.
-10. COST/IMPACT ESTIMATION & CONFIDENCE TAGS: For every risk, provide a "cost_estimate" 
-    describing the financial cost, schedule delay, or resource impact. Assign a mandatory 
-    "confidence_tag": set it to "estimated_from_source_data" ONLY if a specific dollar figure, 
-    ticket count, or exact metric exists in the cited evidence chunks; otherwise set it to 
-    "directional_estimate".
+10. COST/IMPACT ESTIMATION & CONFIDENCE TAGS: For every risk, provide a "cost_estimate" describing 
+    the financial cost, schedule delay, or resource impact. Assign a mandatory "confidence_tag". 
+    It must be EXACTLY one of these two strings: set it to "estimated_from_source_data" ONLY if 
+    a specific dollar figure, ticket count, or exact metric exists in the cited evidence chunks; 
+    otherwise set it to "directional_estimate".
 11. SEVERITY METADATA FLAGS: Include is_sev1: true if the risk involves an active SEV-1 incident, 
     P0 bug, or an open/unassigned postmortem remediation ticket from a SEV-1 outage; otherwise false."
 
@@ -168,29 +169,30 @@ def _parse_risks_response(raw_text: str) -> list[dict]:
     if not isinstance(risks, list):
         return []
  
-    parsed = []
-    for r in risks:
-        if not isinstance(r, dict):
-            continue
-        risk_text = r.get("risk")
-        citations = r.get("citations", [])
-        if not risk_text or not isinstance(citations, list):
-            continue
-            
-        confidence_tag = r.get("confidence_tag")
-        if confidence_tag not in VALID_CONFIDENCE_TAGS:
-            confidence_tag = "directional_estimate"
-            
-        parsed.append({
-            "risk": risk_text,
-            "explanation": r.get("explanation", ""),
-            "cost_estimate": r.get("cost_estimate", "No cost estimate provided"),
-            "confidence_tag": confidence_tag,
-            "is_contradiction": bool(r.get("is_contradiction", False)),
-            "is_sev1": bool(r.get("is_sev1", False)),
-            "citations": citations,
+    parsed_risks = []
+    for risk in data.get("risks", []):
+        # 1. STRICT CONFIDENCE TAG
+        # If it's missing or an hallucinated value, set to None so validation catches it
+        raw_tag = risk.get("confidence_tag")
+        valid_tags = ["directional_estimate", "estimated_from_source_data"]
+        confidence_tag = raw_tag if raw_tag in valid_tags else None
+        
+        # 2. STRICT COST ESTIMATE
+        # If missing or blank, set to None so validation catches it
+        raw_cost = risk.get("cost_estimate", "").strip()
+        cost_estimate = raw_cost if raw_cost else None
+        
+        parsed_risks.append({
+            "risk": risk.get("risk", "Unknown Risk"),
+            "explanation": risk.get("explanation", ""),
+            "citations": risk.get("citations", []),
+            "cost_estimate": cost_estimate,       # Now strictly None if missing
+            "confidence_tag": confidence_tag,     # Now strictly None if invalid
+            "is_sev1": risk.get("is_sev1", False),
+            "is_contradiction": risk.get("is_contradiction", False)
         })
-    return parsed
+        
+    return parsed_risks
  
  
 def analyse_risks(chunks: list[dict]) -> list[dict]:
@@ -211,12 +213,19 @@ def validate_citations(risks: list[dict], known_chunk_ids: set[str]) -> list[dic
     Any risk lacking a valid citation or missing a confidence tag gets marked invalid.
     """
     validated = []
-    for risk in risks:
-        citations = risk.get("citations", [])
-        has_valid_citations = len(citations) > 0 and all(cid in known_chunk_ids for cid in citations)
-        has_confidence_tag = risk.get("confidence_tag") in VALID_CONFIDENCE_TAGS
-        has_cost_estimate = bool(risk.get("cost_estimate"))
+    for r in risks:
+        # Check citations
+        valid_cites = [c for c in r.get("citations", []) if c in known_ids]
+        has_valid_citation = len(valid_cites) > 0
         
-        valid = has_valid_citations and has_confidence_tag and has_cost_estimate
-        validated.append({**risk, "valid": valid})
+        # Check structural requirements
+        has_cost = r.get("cost_estimate") is not None
+        has_confidence = r.get("confidence_tag") is not None
+        
+        # Fail the risk if ANY requirement is missing
+        is_valid = has_valid_citation and has_cost and has_confidence
+        
+        r["valid"] = is_valid
+        r["citations"] = valid_cites
+        validated.append(r)
     return validated

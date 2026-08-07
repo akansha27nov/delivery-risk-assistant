@@ -15,54 +15,74 @@ actual question so final ordering still reflects real relevance, not
 just angle membership.
 
 """
+# src/retrieval.py
+import asyncio
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
+from pinecone import Pinecone
 
-from embedding import _embed, get_index
-from rerank import rerank
+# Load environment variables first!
+load_dotenv()
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+index = pc.Index("delivery-risk-assistant")
 
 RISK_ANGLES = [
     "blockers, dependencies, or blocked tickets that could delay delivery",
     "scope changes or new work added outside of original sprint planning",
     "team capacity, workload, morale, or attrition signals",
-    "SEV-1 incidents, postmortems, outages, or unassigned critical remediation tickets", # Explicit SEV-1 angle
+    "SEV-1 incidents, postmortems, outages, or unassigned critical remediation tickets",
     "status updates and whether they match the evidence in tickets and discussions",
 ]
 
+async def query_single_angle(angle: str, query: str, namespace: str, top_k: int = 2):
+    """Query Pinecone asynchronously for a single risk angle."""
+    # Note: Pinecone's standard SDK is synchronous, so we run it in an executor 
+    # or use its async client if available. Here we wrap the query block.
+    loop = asyncio.get_running_loop()
+    
+    def _pinecone_call():
+        response = client.embeddings.create(
+            input=f"{query} regarding {angle}",
+            model="text-embedding-3-small"
+        )
+        vector = response.data[0].embedding
+        return index.query(
+            vector=vector,
+            top_k=top_k,
+            namespace=namespace,
+            include_metadata=True
+        )
 
-def retrieve(query: str, project: str, k: int = 8) -> list[dict]:
-    """
-    Embed the query, search Pinecone within the given project's namespace
-    only, and reshape matches back into the
-    {"source", "chunk_id", "text", "location", "project", "score"} shape
-    used everywhere else in the pipeline.
-    """
-    index = get_index()
-    query_vec = _embed([query])[0]
-    result = index.query(vector=query_vec, top_k=k, include_metadata=True, namespace=project)
-    return [
-        {
-            "chunk_id": match["id"],
-            "source": match["metadata"]["source"],
-            "location": match["metadata"]["location"],
-            "text": match["metadata"]["text"],
-            "project": project,
-            "score": match["score"],
-        }
-        for match in result["matches"]
-    ]
+    res = await loop.run_in_executor(None, _pinecone_call)
+    chunks = []
+    for match in res.get("matches", []):
+        meta = match.get("metadata", {})
+        chunks.append({
+            "chunk_id": match.get("id"),
+            "text": meta.get("text"),
+            "location": meta.get("location"),
+            "score": match.get("score")
+        })
+    return chunks
 
-
-def gather_evidence(query: str, project: str, k_per_angle: int = 5, final_top_n: int = 8) -> list[dict]:
-    """
-    Multi-angle retrieval + pooling + final rerank against the original
-    query. Deduplicates by chunk_id, keeping the highest retrieval score
-    seen for any chunk that surfaced under more than one angle.
-    """
-    pooled: dict[str, dict] = {}
-    for angle in RISK_ANGLES:
-        for chunk in retrieve(angle, project=project, k=k_per_angle):
-            existing = pooled.get(chunk["chunk_id"])
-            if existing is None or chunk["score"] > existing["score"]:
-                pooled[chunk["chunk_id"]] = chunk
-
-    candidates = list(pooled.values())
-    return rerank(query, candidates, top_n=final_top_n)
+async def gather_evidence_async(project: str, query: str) -> list:
+    """Gathers evidence across all risk angles concurrently using asyncio."""
+    namespace = project.lower()
+    
+    # Fire off all 4-5 angle queries concurrently
+    tasks = [query_single_angle(angle, query, namespace) for angle in RISK_ANGLES]
+    results = await asyncio.gather(*tasks)
+    
+    # Flatten and deduplicate chunks by chunk_id
+    seen = set()
+    unique_chunks = []
+    for angle_chunks in results:
+        for chunk in angle_chunks:
+            if chunk["chunk_id"] not in seen:
+                seen.add(chunk["chunk_id"])
+                unique_chunks.append(chunk)
+                
+    return unique_chunks

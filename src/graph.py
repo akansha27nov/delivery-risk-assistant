@@ -185,3 +185,34 @@ def build_graph():
     graph.add_edge("generate_report", END)
 
     return graph.compile()
+
+def export_workflow_diagrams(png_output_path: str = "docs/workflow_diagram.png") -> str:
+    """
+    Programmatically generates the Mermaid syntax and renders a pretty PNG 
+    architecture diagram directly from the compiled LangGraph workflow.
+    """
+    # Assuming your compiled graph object is named 'app' or returned by a builder function
+    compiled_graph = build_graph()  # Replace with your actual compilation variable/function if different
+    graph_runnable = compiled_graph.get_graph()
+    
+    # 1. Programmatically fetch the raw Mermaid syntax string
+    mermaid_syntax = graph_runnable.draw_mermaid()
+    
+    # 2. Programmatically generate and export a pretty PNG image via code
+    try:
+        graph_runnable.draw_mermaid_png(
+            output_file_path=png_output_path,
+            background_color="white",
+            padding=15
+        )
+        print(f"Successfully generated workflow diagram PNG at: {png_output_path}")
+    except Exception as e:
+        print(f"PNG generation skipped or failed (network/API required for mermaid.ink): {e}")
+        
+    return mermaid_syntax
+
+if __name__ == "__main__":
+    print("=== Programmatically Exporting LangGraph Workflow ===")
+    code = export_workflow_diagrams()
+    print("\nGenerated Mermaid Code:")
+    print(code)

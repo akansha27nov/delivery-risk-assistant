@@ -11,7 +11,8 @@ from agent import (
     validate_citations,
     analyse_risks,
     RiskExtractionResponse,
-    RiskItem
+    RiskItem,
+    ImpactBreakdown
 )
 
 def test_format_evidence():
@@ -32,27 +33,33 @@ def test_validate_citations_valid():
             "risk": "Declining velocity",
             "explanation": "Velocity dropped in sprint 14.",
             "citations": ["sprint_report.md::chunk1", "hallucinated::chunk99"],
-            "cost_estimate": "Project delay risk",
+            "impact_breakdown": {
+                "delivery_impact": "Delay",
+                "customer_impact": "None",
+                "business_impact": "None",
+                "team_impact": "Fatigue"
+            },
             "confidence_tag": "directional_estimate",
             "is_sev1": False,
             "is_contradiction": False
         }
     ]
-    evidence = [{"chunk_id": "sprint_report.md::chunk1"}]
+    evidence = [{"chunk_id": "sprint_report.md::chunk1", "rerank_score": 0.95}]
     validated = validate_citations(risks, evidence)
     
     assert validated[0]["valid"] is True
     assert validated[0]["citations"] == ["sprint_report.md::chunk1"]
-
+    assert "evidence_confidence" in validated[0]
+    assert 10 <= validated[0]["evidence_confidence"] <= 99
 
 def test_validate_citations_missing_required_fields():
-    """Test that a risk fails validation if cost_estimate or confidence_tag is missing."""
+    """Test that a risk fails validation if impact_breakdown or confidence_tag is missing."""
     risks = [
         {
             "risk": "Incomplete Risk",
             "explanation": "Missing mandatory metadata.",
             "citations": ["sprint_report.md::chunk1"],
-            "cost_estimate": None,
+            "impact_breakdown": None,
             "confidence_tag": None,
             "is_sev1": False,
             "is_contradiction": False
@@ -73,10 +80,19 @@ def test_analyse_risks_mocked(mock_parse):
                 risk="Status contradiction detected",
                 explanation="Status report says green while ticket is blocked.",
                 citations=["sprint_report.md::chunk2"],
-                cost_estimate="Delayed partner launch",
+                impact_breakdown=ImpactBreakdown(
+                    delivery_impact="Delayed partner launch",
+                    customer_impact="Partner dissatisfaction",
+                    business_impact="Missed Q3 revenue target",
+                    team_impact="Overtime required"
+                ),
                 confidence_tag="directional_estimate",
                 is_sev1=False,
-                is_contradiction=True
+                is_contradiction=True,
+                recommendations=[
+                    "Escalate blocked ticket to engineering manager",
+                    "Update status report to Amber"
+                ]
             )
         ]
     )
@@ -89,3 +105,4 @@ def test_analyse_risks_mocked(mock_parse):
     assert result[0]["risk"] == "Status contradiction detected"
     assert result[0]["is_contradiction"] is True
     assert result[0]["citations"] == ["sprint_report.md::chunk2"]
+    assert len(result[0]["recommendations"]) == 2

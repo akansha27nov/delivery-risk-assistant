@@ -63,14 +63,14 @@ Hard rules:
 9. Each of your risks must represent a genuinely distinct underlying issue. Do not split one
    issue across two risk entries, and do not pad a risk's citations with chunks that don't
    directly support that specific risk's claim just because they're topically related.
-10. COST/IMPACT ESTIMATION & CONFIDENCE TAGS: For every risk, provide a "cost_estimate" describing 
-    the financial cost, schedule delay, or resource impact. Assign a mandatory "confidence_tag". 
-    It must be EXACTLY one of these two strings: set it to "estimated_from_source_data" ONLY if 
-    a specific dollar figure, ticket count, or exact metric exists in the cited evidence chunks; 
-    otherwise set it to "directional_estimate".
+10. IMPACT BREAKDOWN & CONFIDENCE TAGS: For every risk, provide a structured "impact_breakdown" 
+    detailing delivery, customer, business, and team impacts. Assign a mandatory "confidence_tag"...
 11. SEVERITY METADATA FLAGS: Include is_sev1: true if the risk involves an active SEV-1 incident, 
     P0 bug, or an open/unassigned postmortem remediation ticket from a SEV-1 outage; otherwise false."
-
+12. RECOMMENDATIONS RULE: For every identified risk, you must provide exactly 2-3 actionable recommendations 
+    in a list format. These MUST be strictly derived from the provided evidence. 
+    Do not hallucinate external solutions.
+    
 Worked example of rule 4 (contradiction detection):
  
 Evidence includes:
@@ -123,11 +123,17 @@ Respond with ONLY valid JSON in this exact shape, no other text:
     {
       "risk": "short risk title",
       "explanation": "one to two sentences explaining the risk and its evidence",
-      "cost_estimate": "description of delay, dollar impact, or operational cost",
+      "impact_breakdown": {
+        "delivery_impact": "description of schedule delay or milestone impact",
+        "customer_impact": "description of end-user or partner impact",
+        "business_impact": "description of revenue or strategic impact",
+        "team_impact": "description of engineering capacity or morale impact"
+      },
       "confidence_tag": "estimated_from_source_data OR directional_estimate",
       "is_contradiction": true,
       "is_sev1": false,
-      "citations": ["chunk_id_1", "chunk_id_2"]
+      "citations": ["chunk_id_1", "chunk_id_2"],
+      "recommendations": ["Actionable step 1 based on evidence", "Actionable step 2 based on evidence"]
     }
   ]
 }
@@ -136,28 +142,31 @@ Respond with ONLY valid JSON in this exact shape, no other text:
 # ==========================================
 # 🛡️ Pydantic Schemas for Structured Output
 # ==========================================
+
+class ImpactBreakdown(BaseModel):
+    delivery_impact: str = Field(description="Impact on project timelines, milestones, or deliverables.")
+    customer_impact: str = Field(description="Impact on end-users, stakeholders, or external partners.")
+    business_impact: str = Field(description="Impact on revenue, compliance, or strategic business goals.")
+    team_impact: str = Field(description="Impact on engineering capacity, morale, or workload.")
+    
 class RiskItem(BaseModel):
     risk: str = Field(description="Concise title or summary of the delivery risk.")
     explanation: str = Field(description="Detailed explanation of why this is a risk based on evidence.")
     citations: List[str] = Field(description="List of exact chunk IDs supporting this claim.")
-    cost_estimate: Optional[str] = Field(default=None, description="Estimated cost, financial impact, or delivery delay.")
+    impact_breakdown: ImpactBreakdown = Field(description="Structured breakdown of the risk's impact.")
     confidence_tag: Optional[str] = Field(default=None, description="Must be 'estimated_from_source_data' or 'directional_estimate'.")
     is_sev1: bool = Field(default=False, description="True if explicitly tagged SEV-1 or critical financial/customer impact.")
     is_contradiction: bool = Field(default=False, description="True if an official status report contradicts underlying tickets/Slack threads.")
-
+    recommendations: list[str] = Field(
+        description="2-3 actionable recommendations to mitigate the risk, based ONLY on the retrieved evidence."
+    )
+    
     @field_validator("confidence_tag", mode="before")
     @classmethod
     def validate_confidence_tag(cls, v):
         if v not in VALID_CONFIDENCE_TAGS:
             return None
         return v
-
-    @field_validator("cost_estimate", mode="before")
-    @classmethod
-    def validate_cost_estimate(cls, v):
-        if not v or not str(v).strip():
-            return None
-        return str(v).strip()
 
 class RiskExtractionResponse(BaseModel):
     risks: List[RiskItem] = Field(description="List of extracted delivery risks meeting criteria.")
@@ -200,10 +209,11 @@ def _parse_risks_response(parsed_response: Optional[RiskExtractionResponse]) -> 
             "risk": risk.risk,
             "explanation": risk.explanation,
             "citations": risk.citations,
-            "cost_estimate": risk.cost_estimate,
+            "impact_breakdown": risk.impact_breakdown.model_dump(),
             "confidence_tag": risk.confidence_tag,
             "is_sev1": risk.is_sev1,
-            "is_contradiction": risk.is_contradiction
+            "is_contradiction": risk.is_contradiction,
+            "recommendations": risk.recommendations
         })
     return parsed_risks
  
@@ -223,12 +233,13 @@ def analyse_risks(chunks: list[dict]) -> list[dict]:
  
 def validate_citations(risks: list[dict], evidence) -> list[dict]:
     """
-    Validates citations, cost estimates, and confidence tags.
-    'evidence' can be a list of chunk dicts (from graph execution) 
-    or a set/iterable of known chunk ID strings (from unit tests).
+    Validates citations, impact breakdown, and computes transparent Evidence Confidence 
+    using objective retrieval and validation metrics.
     """
+    evidence_map = {}
     if evidence and isinstance(next(iter(evidence), None), dict):
-        known_ids = {c.get("chunk_id") for c in evidence}
+        evidence_map = {c.get("chunk_id"): c for c in evidence}
+        known_ids = set(evidence_map.keys())
     else:
         known_ids = set(evidence) if evidence else set()
 
@@ -237,12 +248,54 @@ def validate_citations(risks: list[dict], evidence) -> list[dict]:
         valid_cites = [c for c in r.get("citations", []) if c in known_ids]
         has_valid_citation = len(valid_cites) > 0
         
-        has_cost = r.get("cost_estimate") is not None
-        has_confidence = r.get("confidence_tag") is not None
+        has_impact = r.get("impact_breakdown") is not None
+        has_confidence_tag = r.get("confidence_tag") is not None
         
-        is_valid = has_valid_citation and has_cost and has_confidence
+        is_valid = has_valid_citation and has_impact and has_confidence_tag
+        
+        # ==========================================
+        # EVIDENCE CONFIDENCE HEURISTIC (New Weights)
+        # ==========================================
+        # Base weight: 20%
+        base_score = 20.0
+        
+        # 1. Citation Validation: 30%
+        citation_score = 30.0 if has_valid_citation else 0.0
+        
+        # 2. Number of Supporting Documents: 25% max (scaled by count)
+        num_citations = len(valid_cites)
+        supporting_docs_score = min(num_citations * 8.33, 25.0)
+        
+        # 3. Average Rerank Score: 25% max
+        avg_rerank = 0.5
+        if evidence_map and num_citations > 0:
+            rerank_scores = [
+                evidence_map.get(c, {}).get("rerank_score", evidence_map.get(c, {}).get("score", 0.5)) 
+                for c in valid_cites
+            ]
+            avg_rerank = sum(rerank_scores) / len(rerank_scores) if rerank_scores else 0.5
+        rerank_score_component = avg_rerank * 25.0
+        
+        total_score = base_score + citation_score + supporting_docs_score + rerank_score_component
+        evidence_confidence = int(min(max(total_score, 10), 99))
+        
+        # Determine human-readable retrieval quality label
+        if avg_rerank >= 0.8:
+            retrieval_quality = "High"
+        elif avg_rerank >= 0.5:
+            retrieval_quality = "Medium"
+        else:
+            retrieval_quality = "Low"
+        # ==========================================
         
         r["valid"] = is_valid
         r["citations"] = valid_cites
+        r["evidence_confidence"] = evidence_confidence
+        r["confidence_breakdown"] = {
+            "citation_valid": has_valid_citation,
+            "num_docs": num_citations,
+            "retrieval_quality": retrieval_quality
+        }
         validated.append(r)
+        
     return validated

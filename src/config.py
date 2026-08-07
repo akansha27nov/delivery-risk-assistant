@@ -1,0 +1,43 @@
+# src/config.py
+import os
+from dotenv import load_dotenv
+
+# Automatically load .env file
+load_dotenv()
+
+# ==========================================================
+# 🔑 API Credentials
+# ==========================================================
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+# ==========================================================
+# 🤖 Model Configurations
+# ==========================================================
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+
+# ===========================================================
+# 🌲 Vector Store Settings
+# ===========================================================
+PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX", "delivery-risk-assistant")
+
+# ===========================================================
+# ⚙️ Pipeline Thresholds & Parameters
+# ===========================================================
+MAX_CHUNK_CHARS = 600
+MIN_EVIDENCE_CHUNKS = 2
+DEFAULT_TOP_K = 2
+
+# ===========================================================
+# 🔍 Multi-Angle Retrieval Prompts
+# ===========================================================
+RISK_ANGLES = [
+    "blockers, dependencies, or blocked tickets that could delay delivery",
+    "scope changes or new work added outside of original sprint planning",
+    "team capacity, workload, morale, or attrition signals",
+    "SEV-1 incidents, postmortems, outages, or unassigned critical remediation tickets",
+    "status updates and whether they match the evidence in tickets and discussions",
+]

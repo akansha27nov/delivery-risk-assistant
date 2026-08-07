@@ -14,9 +14,12 @@ import requests
 from typing import TypedDict
 from langgraph.graph import END, StateGraph
 from agent import analyse_risks, validate_citations
-from retrieval import gather_evidence_async  # <--- Updated import
-
-MIN_EVIDENCE_CHUNKS = 2
+from retrieval import gather_evidence_async
+from config import (
+    MIN_EVIDENCE_CHUNKS,
+    TELEGRAM_BOT_TOKEN,
+    TELEGRAM_CHAT_ID
+)
 
 class GraphState(TypedDict, total=False):
     project: str
@@ -108,10 +111,10 @@ def route_to_hitl(state: dict) -> dict:
         f"Extracted Risks:\n{risk_summary}"
     )
     
-    if token and chat_id:
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
+    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         payload = {
-            "chat_id": chat_id,
+            "chat_id": TELEGRAM_CHAT_ID,
             "text": message
         }
         try:

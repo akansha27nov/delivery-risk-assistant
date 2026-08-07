@@ -21,23 +21,23 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 from pinecone import Pinecone
+from config import (
+    OPENAI_API_KEY,
+    PINECONE_API_KEY,
+    PINECONE_INDEX_NAME,
+    EMBEDDING_MODEL,
+    RISK_ANGLES,
+    DEFAULT_TOP_K
+)
 
 # Load environment variables first!
 load_dotenv()
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-index = pc.Index("delivery-risk-assistant")
+client = OpenAI(api_key=OPENAI_API_KEY)
+pc = Pinecone(api_key=PINECONE_API_KEY)
+index = pc.Index(PINECONE_INDEX_NAME)
 
-RISK_ANGLES = [
-    "blockers, dependencies, or blocked tickets that could delay delivery",
-    "scope changes or new work added outside of original sprint planning",
-    "team capacity, workload, morale, or attrition signals",
-    "SEV-1 incidents, postmortems, outages, or unassigned critical remediation tickets",
-    "status updates and whether they match the evidence in tickets and discussions",
-]
-
-async def query_single_angle(angle: str, query: str, namespace: str, top_k: int = 2):
+async def query_single_angle(angle: str, query: str, namespace: str, top_k: int = DEFAULT_TOP_K):
     """Query Pinecone asynchronously for a single risk angle."""
     # Note: Pinecone's standard SDK is synchronous, so we run it in an executor 
     # or use its async client if available. Here we wrap the query block.
@@ -46,7 +46,7 @@ async def query_single_angle(angle: str, query: str, namespace: str, top_k: int 
     def _pinecone_call():
         response = client.embeddings.create(
             input=f"{query} regarding {angle}",
-            model="text-embedding-3-small"
+            model=EMBEDDING_MODEL
         )
         vector = response.data[0].embedding
         return index.query(

@@ -19,12 +19,10 @@ import os
  
 from dotenv import load_dotenv
 from openai import OpenAI
- 
-load_dotenv()
- 
-MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+from config import OPENAI_API_KEY, LLM_MODEL
+
 VALID_CONFIDENCE_TAGS = {"estimated_from_source_data", "directional_estimate"}
-client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+client = OpenAI(api_key=OPENAI_API_KEY)
  
 SYSTEM_PROMPT = """You are a delivery risk analyst for a software engineering programme.
 You are given evidence chunks pulled from real project artefacts (sprint reports, ticket
@@ -148,7 +146,7 @@ def _format_evidence(chunks: list[dict]) -> str:
 def _call_llm(evidence_text: str) -> str:
     """The one part of this file that needs OPENAI_API_KEY + internet."""
     response = client.chat.completions.create(
-        model=MODEL,
+        model=LLM_MODEL,
         temperature=0,
         response_format={"type": "json_object"},
         messages=[

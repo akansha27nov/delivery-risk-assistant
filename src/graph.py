@@ -19,7 +19,8 @@ from langgraph.graph import END, StateGraph
 from agent import analyse_risks, validate_citations
 from retrieval import gather_evidence
  
-MIN_RERANK_SCORE = 0.05  # heuristic threshold for "enough evidence" -- tune in Step 4.2
+MIN_EVIDENCE_CHUNKS = 2  # "enough evidence" = retrieval returned something,
+                          # not a relevance-quality bar (see has_enough_evidence)
  
  
 class GraphState(TypedDict, total=False):
@@ -42,10 +43,19 @@ def retrieve_documents(state: GraphState) -> GraphState:
  
  
 def has_enough_evidence(state: GraphState) -> str:
+    """
+    Deliberately NOT a threshold on rerank_score: Cohere's relevance score
+    isn't calibrated to a fixed scale across different queries/candidate
+    pools -- the same genuinely-good evidence scored 0.4 in one run and
+    0.03 in another. A score threshold here would be unreliable no matter
+    what number is picked. This gate instead answers the question it's
+    actually meant to answer: did retrieval return anything at all for
+    this project (the cold-start / empty-corpus case)? Actual relevance
+    and groundedness are handled downstream by rerank ordering and the
+    citation validator, not here.
+    """
     evidence = state.get("evidence", [])
-    if evidence and evidence[0].get("rerank_score", 0) >= MIN_RERANK_SCORE:
-        return "yes"
-    return "no"
+    return "yes" if len(evidence) >= MIN_EVIDENCE_CHUNKS else "no"
  
  
 def ask_for_more_documents(state: GraphState) -> GraphState:

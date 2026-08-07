@@ -9,7 +9,8 @@ Phase 4: LangGraph state machine with deterministic decision-tree severity routi
                                 -- Yes --> Route to HITL -----------| (Telegram Gate)
                                 -- No  --> Generate Report ---------> END
 """
- 
+import os
+import requests
 from typing import TypedDict
 from langgraph.graph import END, StateGraph
 from agent import analyse_risks, validate_citations
@@ -98,14 +99,45 @@ def reject_response(state: GraphState) -> GraphState:
     }}
  
  
-def route_to_hitl(state: GraphState) -> GraphState:
-    """Placeholder node for Telegram HITL gate approval flow[cite: 33]."""
-    return {**state, "result": {
-        "status": "pending_hitl_approval",
-        "message": "High-severity risk detected (SEV-1 or status contradiction). Escalated for human approval.",
-        "project": state["project"],
-        "risks": state["risks"],
-    }}
+def route_to_hitl(state: dict) -> dict:
+    """Sends a Telegram alert when a high-severity risk or status contradiction is flagged."""
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    
+    project = state.get("project", "unknown")
+    
+    # Safely pull risks from state whether they are nested or top-level
+    risks = state.get("risks", state.get("result", {}).get("risks", []))
+    
+    risk_summary = "\n".join(
+        [f"• {r.get('risk')} (Cost: {r.get('cost_estimate', 'N/A')})" for r in risks]
+    )
+    
+    # Use plain text (no parse_mode) to prevent Telegram 400 Bad Request errors from special characters
+    message = (
+        f"🚨 HITL Escalation Required\n"
+        f"Project: {project.upper()}\n"
+        f"Reason: High-severity risk or status contradiction detected.\n\n"
+        f"Extracted Risks:\n{risk_summary}"
+    )
+    
+    if token and chat_id:
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = {
+            "chat_id": chat_id,
+            "text": message
+        }
+        try:
+            response = requests.post(url, json=payload)
+            response.raise_for_status()
+            print("Telegram HITL alert sent successfully!")
+        except Exception as e:
+            print(f"Error sending Telegram notification: {e}")
+    else:
+        print("Telegram credentials missing. Skipping notification delivery.")
+        
+    state["requires_hitl"] = True
+    return state
  
  
 def generate_report(state: GraphState) -> GraphState:

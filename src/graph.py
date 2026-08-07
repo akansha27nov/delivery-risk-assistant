@@ -94,9 +94,6 @@ def reject_response(state: GraphState) -> GraphState:
 
 def route_to_hitl(state: dict) -> dict:
     """Sends a Telegram alert when a high-severity risk or status contradiction is flagged."""
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
-    
     project = state.get("project", "unknown")
     risks = state.get("risks", state.get("result", {}).get("risks", []))
     
@@ -104,32 +101,38 @@ def route_to_hitl(state: dict) -> dict:
         [f"• {r.get('risk')} (Cost: {r.get('cost_estimate', 'N/A')})" for r in risks]
     )
     
-    message = (
+    telegram_message = (
         f"🚨 HITL Escalation Required\n"
         f"Project: {project.upper()}\n"
         f"Reason: High-severity risk or status contradiction detected.\n\n"
         f"Extracted Risks:\n{risk_summary}"
     )
     
+    # Track the actual outcome of the Telegram API call
+    ui_message = ""
+    
     if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         payload = {
             "chat_id": TELEGRAM_CHAT_ID,
-            "text": message
+            "text": telegram_message
         }
         try:
             response = requests.post(url, json=payload)
             response.raise_for_status()
             print("Telegram HITL alert sent successfully!")
+            ui_message = "High-severity risk or status contradiction detected. Escalated to Telegram for human review."
         except Exception as e:
             print(f"Error sending Telegram notification: {e}")
+            ui_message = "High-severity risk detected, but Telegram delivery failed (Network/API Error). Check console for details."
     else:
         print("Telegram credentials missing. Skipping notification delivery.")
+        ui_message = "High-severity risk detected, but Telegram credentials are missing in the environment. Alert not sent."
         
     state["requires_hitl"] = True
     state["result"] = {
         "status": "pending_hitl_approval",
-        "message": "High-severity risk or status contradiction detected. Escalated to Telegram for human review.",
+        "message": ui_message,  # Surfacing the actual delivery reality to the UI
         "risks": risks
     }
     return state

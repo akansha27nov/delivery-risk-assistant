@@ -23,7 +23,7 @@ from openai import OpenAI
 load_dotenv()
  
 MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
- 
+VALID_CONFIDENCE_TAGS = {"estimated_from_source_data", "directional_estimate"}
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
  
 SYSTEM_PROMPT = """You are a delivery risk analyst for a software engineering programme.
@@ -66,7 +66,14 @@ Hard rules:
 9. Each of your risks must represent a genuinely distinct underlying issue. Do not split one
    issue across two risk entries, and do not pad a risk's citations with chunks that don't
    directly support that specific risk's claim just because they're topically related.
- 
+10. COST/IMPACT ESTIMATION & CONFIDENCE TAGS: For every risk, provide a "cost_estimate" 
+    describing the financial cost, schedule delay, or resource impact. Assign a mandatory 
+    "confidence_tag": set it to "estimated_from_source_data" ONLY if a specific dollar figure, 
+    ticket count, or exact metric exists in the cited evidence chunks; otherwise set it to 
+    "directional_estimate".
+11. SEVERITY METADATA FLAGS: Include is_sev1: true if the risk involves an active SEV-1 incident, 
+    P0 bug, or an open/unassigned postmortem remediation ticket from a SEV-1 outage; otherwise false."
+
 Worked example of rule 4 (contradiction detection):
  
 Evidence includes:
@@ -80,8 +87,11 @@ Evidence includes:
 Correct output includes a risk like:
 {
   "risk": "Status report contradicts open incident evidence",
-  "explanation": "The status update claims no blockers, but an unassigned SEV-1 remediation
-  ticket with no target date is still open. The status report does not reflect this.",
+  "explanation": "The status update claims no blockers, but an unassigned SEV-1 remediation ticket with no target date is still open. The status report does not reflect this.",
+  "cost_estimate": "Delayed incident remediation with potential outage/revenue impact",
+  "confidence_tag": "directional_estimate",
+  "is_contradiction": true,
+  "is_sev1": true,
   "citations": ["status_update::1", "incident_report::1"]
 }
  
@@ -95,8 +105,11 @@ Evidence includes:
 Correct output includes a risk like:
 {
   "risk": "Uncontrolled mid-sprint scope addition",
-  "explanation": "New work (XYZ-99) was added to the sprint outside of original planning,
-  with no corresponding timeline adjustment or scope trade-off.",
+  "explanation": "New work (XYZ-99) was added to the sprint outside of original planning, with no corresponding timeline adjustment or scope trade-off.",
+  "cost_estimate": "Engineering capacity deflection from planned sprint commitments",
+  "confidence_tag": "directional_estimate",
+  "is_contradiction": false,
+  "is_sev1": false,
   "citations": ["ticket_export::1"]
 }
  
@@ -113,6 +126,10 @@ Respond with ONLY valid JSON in this exact shape, no other text:
     {
       "risk": "short risk title",
       "explanation": "one to two sentences explaining the risk and its evidence",
+      "cost_estimate": "description of delay, dollar impact, or operational cost",
+      "confidence_tag": "estimated_from_source_data OR directional_estimate",
+      "is_contradiction": true,
+      "is_sev1": false,
       "citations": ["chunk_id_1", "chunk_id_2"]
     }
   ]
@@ -143,12 +160,7 @@ def _call_llm(evidence_text: str) -> str:
  
  
 def _parse_risks_response(raw_text: str) -> list[dict]:
-    """
-    Parse and sanity-check the LLM's JSON response. Pure Python -- testable
-    without any API call. Malformed JSON or an unexpected shape returns an
-    empty list rather than crashing the graph; validate_citations() is the
-    real downstream safety net regardless, so this just needs to not blow up.
-    """
+    """Parse and sanity-check the LLM's JSON response structure."""
     try:
         data = json.loads(raw_text)
     except (json.JSONDecodeError, TypeError):
@@ -166,9 +178,18 @@ def _parse_risks_response(raw_text: str) -> list[dict]:
         citations = r.get("citations", [])
         if not risk_text or not isinstance(citations, list):
             continue
+            
+        confidence_tag = r.get("confidence_tag")
+        if confidence_tag not in VALID_CONFIDENCE_TAGS:
+            confidence_tag = "directional_estimate"
+            
         parsed.append({
             "risk": risk_text,
             "explanation": r.get("explanation", ""),
+            "cost_estimate": r.get("cost_estimate", "No cost estimate provided"),
+            "confidence_tag": confidence_tag,
+            "is_contradiction": bool(r.get("is_contradiction", False)),
+            "is_sev1": bool(r.get("is_sev1", False)),
             "citations": citations,
         })
     return parsed
@@ -188,14 +209,16 @@ def analyse_risks(chunks: list[dict]) -> list[dict]:
  
 def validate_citations(risks: list[dict], known_chunk_ids: set[str]) -> list[dict]:
     """
-    For each risk, check every citation actually exists in known_chunk_ids
-    (the chunk_ids that were actually retrieved/reranked for this query).
-    Any risk with a missing/invalid citation gets marked invalid -- this
-    feeds the "Citation Missing?" branch in the graph.
+    Validates both citations and structural requirements (cost estimate & confidence tag).
+    Any risk lacking a valid citation or missing a confidence tag gets marked invalid.
     """
     validated = []
     for risk in risks:
         citations = risk.get("citations", [])
-        valid = len(citations) > 0 and all(cid in known_chunk_ids for cid in citations)
+        has_valid_citations = len(citations) > 0 and all(cid in known_chunk_ids for cid in citations)
+        has_confidence_tag = risk.get("confidence_tag") in VALID_CONFIDENCE_TAGS
+        has_cost_estimate = bool(risk.get("cost_estimate"))
+        
+        valid = has_valid_citations and has_confidence_tag and has_cost_estimate
         validated.append({**risk, "valid": valid})
     return validated

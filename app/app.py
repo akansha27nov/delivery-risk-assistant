@@ -1,5 +1,6 @@
 import os
 import sys
+import asyncio
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -36,7 +37,9 @@ if run_audit:
             "project": project_choice,
             "question": user_question
         }
-        result = app.invoke(state)
+        
+        # FIX: Wrap the async graph invocation in asyncio.run
+        result = asyncio.run(app.ainvoke(state)) 
         
         # Handle state response mapping flexibly
         res_container = result.get("result", result)

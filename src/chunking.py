@@ -1,6 +1,9 @@
 """
+Phase 2, Step 2: Chunking.
+
 Splits loaded documents (from ingestion.py) into small chunks with metadata,
-carrying the "project" tag through so it can flow into Pinecone as anamespace later:
+carrying the "project" tag through so it can flow into Pinecone as a
+namespace later:
 
   {"source", "chunk_id", "text", "location", "project"}
 
@@ -11,6 +14,7 @@ Two strategies:
 """
 
 MAX_CHARS = 600
+
 
 def _chunk_text_doc(source: str, content: str, project: str, max_chars: int = MAX_CHARS) -> list[dict]:
     chunks = []
@@ -38,11 +42,14 @@ def _chunk_text_doc(source: str, content: str, project: str, max_chars: int = MA
         para = para.strip()
         if not para:
             continue
-        first_line = para.splitlines()[0]
-        if first_line.startswith("#"):
+        lines = para.splitlines()
+        if lines[0].startswith("#"):
             flush()
-            current_heading = first_line.lstrip("#").strip()
-            continue  # heading itself isn't a chunk
+            current_heading = lines[0].lstrip("#").strip()
+            remainder = "\n".join(lines[1:]).strip()
+            if not remainder:
+                continue  # heading was on its own -- nothing else in this paragraph
+            para = remainder  # heading was immediately followed by content, no blank line
         if buffer_len + len(para) > max_chars and buffer:
             flush()
         buffer.append(para)

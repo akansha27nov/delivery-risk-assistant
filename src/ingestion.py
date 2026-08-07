@@ -1,5 +1,5 @@
 """
-Phase 2, Step 1: Document loading.
+Document loading.
 
 Reads every file in data/ and normalizes it into one of two shapes, with a
 "project" tag attached so results never get jumbled across projects later:
@@ -14,6 +14,7 @@ letting it bleed into the wrong project's risk analysis.
 """
 
 import csv
+import io
 import json
 from pathlib import Path
 
@@ -67,6 +68,28 @@ def load_documents(data_dir: Path = DATA_DIR, manifest_path: Path = MANIFEST_PAT
                 "project": project,
             })
     return documents
+
+
+def build_document_from_upload(filename: str, raw_content: str, project: str) -> dict:
+    """
+    Build a single document dict from an uploaded file's raw text content,
+    for LIVE ingestion into an EXISTING project (used by the Upload step
+    in app.py). Unlike load_documents(), this does not require the file to
+    be listed in project_manifest.json -- the project is chosen explicitly
+    by whoever is uploading, via the UI, since this is a one-off addition
+    to an already-established project rather than part of the static
+    demo corpus.
+    """
+    suffix = Path(filename).suffix.lower()
+    if suffix in TEXT_EXTENSIONS:
+        return {"source": filename, "type": "text", "content": raw_content, "project": project}
+    elif suffix in CSV_EXTENSIONS:
+        rows = list(csv.DictReader(io.StringIO(raw_content)))
+        return {"source": filename, "type": "csv", "rows": rows, "project": project}
+    else:
+        raise ValueError(
+            f"Unsupported file type: '{filename}'. Supported: {sorted(TEXT_EXTENSIONS | CSV_EXTENSIONS)}"
+        )
 
 
 if __name__ == "__main__":

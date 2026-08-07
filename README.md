@@ -67,7 +67,7 @@ hallucination as a defect to be caught, not an acceptable trade-off.
 
 ```
 delivery-risk-assistant/
-├── data/                    # Sample project artefacts (the RAG corpus)
+├── knowledge_base/                    # Sample project artefacts (the RAG corpus)
 │   ├── sprint_report.md            # Batch 1 — Team Atlas / Rewards Partner
 │   ├── ticket_export.csv
 │   ├── standup_transcript.txt
@@ -96,7 +96,7 @@ delivery-risk-assistant/
 
 ## Sample corpus
 
-The `data/` folder contains two synthetic project narratives, all fabricated, with risks
+The `knowledge_base/` folder contains two synthetic project narratives, all fabricated, with risks
 intentionally planted so output can be checked against a known answer key.
 
 **Batch 1 — Team Atlas / Rewards Partner launch** (sprint report, ticket export, standup

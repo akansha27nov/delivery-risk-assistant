@@ -14,11 +14,9 @@ final safety net regardless of how good or bad the LLM's own citation
 discipline turns out to be.
 """
  
-import json
-import os
- 
-from dotenv import load_dotenv
+from typing import List, Optional
 from openai import OpenAI
+from pydantic import BaseModel, Field, field_validator
 from config import OPENAI_API_KEY, LLM_MODEL
 
 VALID_CONFIDENCE_TAGS = {"estimated_from_source_data", "directional_estimate"}
@@ -135,7 +133,36 @@ Respond with ONLY valid JSON in this exact shape, no other text:
 }
 """
  
- 
+# ==========================================
+# 🛡️ Pydantic Schemas for Structured Output
+# ==========================================
+class RiskItem(BaseModel):
+    risk: str = Field(description="Concise title or summary of the delivery risk.")
+    explanation: str = Field(description="Detailed explanation of why this is a risk based on evidence.")
+    citations: List[str] = Field(description="List of exact chunk IDs supporting this claim.")
+    cost_estimate: Optional[str] = Field(default=None, description="Estimated cost, financial impact, or delivery delay.")
+    confidence_tag: Optional[str] = Field(default=None, description="Must be 'estimated_from_source_data' or 'directional_estimate'.")
+    is_sev1: bool = Field(default=False, description="True if explicitly tagged SEV-1 or critical financial/customer impact.")
+    is_contradiction: bool = Field(default=False, description="True if an official status report contradicts underlying tickets/Slack threads.")
+
+    @field_validator("confidence_tag", mode="before")
+    @classmethod
+    def validate_confidence_tag(cls, v):
+        if v not in VALID_CONFIDENCE_TAGS:
+            return None
+        return v
+
+    @field_validator("cost_estimate", mode="before")
+    @classmethod
+    def validate_cost_estimate(cls, v):
+        if not v or not str(v).strip():
+            return None
+        return str(v).strip()
+
+class RiskExtractionResponse(BaseModel):
+    risks: List[RiskItem] = Field(description="List of extracted delivery risks meeting criteria.")
+
+
 def _format_evidence(chunks: list[dict]) -> str:
     """Pure formatting, no LLM call -- testable on its own."""
     blocks = []
@@ -144,67 +171,54 @@ def _format_evidence(chunks: list[dict]) -> str:
     return "\n---\n".join(blocks)
  
  
-def _call_llm(evidence_text: str) -> str:
-    """The one part of this file that needs OPENAI_API_KEY + internet."""
-    response = client.chat.completions.create(
-        model=LLM_MODEL,
-        temperature=0,
-        response_format={"type": "json_object"},
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"Evidence:\n\n{evidence_text}"},
-        ],
-    )
-    return response.choices[0].message.content
- 
- 
-def _parse_risks_response(raw_text: str) -> list[dict]:
-    """Parse and sanity-check the LLM's JSON response structure."""
+def _call_llm(evidence_text: str) -> Optional[RiskExtractionResponse]:
+    """Calls OpenAI using structured outputs with Pydantic schema enforcement."""
     try:
-        data = json.loads(raw_text)
-    except (json.JSONDecodeError, TypeError):
-        return []
+        completion = client.beta.chat.completions.parse(
+            model=LLM_MODEL,
+            temperature=0,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": f"Evidence:\n\n{evidence_text}"},
+            ],
+            response_format=RiskExtractionResponse,
+        )
+        return completion.choices[0].message.parsed
+    except Exception as e:
+        print(f"OpenAI structured parsing error: {e}")
+        return None
  
-    risks = data.get("risks", [])
-    if not isinstance(risks, list):
-        return []
  
+def _parse_risks_response(parsed_response: Optional[RiskExtractionResponse]) -> list[dict]:
+    """Convert parsed Pydantic response object to list of dicts for LangGraph state compatibility."""
+    if not parsed_response or not parsed_response.risks:
+        return []
+    
     parsed_risks = []
-    for risk in data.get("risks", []):
-        # 1. STRICT CONFIDENCE TAG
-        # If it's missing or an hallucinated value, set to None so validation catches it
-        raw_tag = risk.get("confidence_tag")
-        valid_tags = ["directional_estimate", "estimated_from_source_data"]
-        confidence_tag = raw_tag if raw_tag in valid_tags else None
-        
-        # 2. STRICT COST ESTIMATE
-        # If missing or blank, set to None so validation catches it
-        raw_cost = risk.get("cost_estimate", "").strip()
-        cost_estimate = raw_cost if raw_cost else None
-        
+    for risk in parsed_response.risks:
         parsed_risks.append({
-            "risk": risk.get("risk", "Unknown Risk"),
-            "explanation": risk.get("explanation", ""),
-            "citations": risk.get("citations", []),
-            "cost_estimate": cost_estimate,       # Now strictly None if missing
-            "confidence_tag": confidence_tag,     # Now strictly None if invalid
-            "is_sev1": risk.get("is_sev1", False),
-            "is_contradiction": risk.get("is_contradiction", False)
+            "risk": risk.risk,
+            "explanation": risk.explanation,
+            "citations": risk.citations,
+            "cost_estimate": risk.cost_estimate,
+            "confidence_tag": risk.confidence_tag,
+            "is_sev1": risk.is_sev1,
+            "is_contradiction": risk.is_contradiction
         })
-        
     return parsed_risks
  
  
 def analyse_risks(chunks: list[dict]) -> list[dict]:
     """
     Given reranked evidence chunks, ask the LLM to identify up to 3
-    delivery risks, each grounded in at least one real chunk_id.
+    delivery risks, each grounded in at least one real chunk_id,
+    validated via Pydantic structured outputs.
     """
     if not chunks:
         return []
     evidence_text = _format_evidence(chunks)
-    raw = _call_llm(evidence_text)
-    return _parse_risks_response(raw)
+    parsed_response = _call_llm(evidence_text)
+    return _parse_risks_response(parsed_response)
  
  
 def validate_citations(risks: list[dict], evidence) -> list[dict]:
@@ -213,7 +227,6 @@ def validate_citations(risks: list[dict], evidence) -> list[dict]:
     'evidence' can be a list of chunk dicts (from graph execution) 
     or a set/iterable of known chunk ID strings (from unit tests).
     """
-    # Handle both list of dicts and pre-built sets/iterables of IDs
     if evidence and isinstance(next(iter(evidence), None), dict):
         known_ids = {c.get("chunk_id") for c in evidence}
     else:
@@ -221,15 +234,12 @@ def validate_citations(risks: list[dict], evidence) -> list[dict]:
 
     validated = []
     for r in risks:
-        # Check citations
         valid_cites = [c for c in r.get("citations", []) if c in known_ids]
         has_valid_citation = len(valid_cites) > 0
         
-        # Check structural requirements (must not be None)
         has_cost = r.get("cost_estimate") is not None
         has_confidence = r.get("confidence_tag") is not None
         
-        # Fail the risk if ANY requirement is missing
         is_valid = has_valid_citation and has_cost and has_confidence
         
         r["valid"] = is_valid

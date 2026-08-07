@@ -15,7 +15,6 @@ actual question so final ordering still reflects real relevance, not
 just angle membership.
 
 """
-# src/retrieval.py
 import asyncio
 import os
 from dotenv import load_dotenv
@@ -27,10 +26,11 @@ from config import (
     PINECONE_INDEX_NAME,
     EMBEDDING_MODEL,
     RISK_ANGLES,
-    DEFAULT_TOP_K
+    DEFAULT_TOP_K,
+    FINAL_TOP_N       # <--- Import the new constant
 )
+from rerank import rerank 
 
-# Load environment variables first!
 load_dotenv()
 
 client = OpenAI(api_key=OPENAI_API_KEY)
@@ -72,11 +72,9 @@ async def gather_evidence_async(project: str, query: str) -> list:
     """Gathers evidence across all risk angles concurrently using asyncio."""
     namespace = project.lower()
     
-    # Fire off all 4-5 angle queries concurrently
     tasks = [query_single_angle(angle, query, namespace) for angle in RISK_ANGLES]
     results = await asyncio.gather(*tasks)
     
-    # Flatten and deduplicate chunks by chunk_id
     seen = set()
     unique_chunks = []
     for angle_chunks in results:
@@ -85,4 +83,7 @@ async def gather_evidence_async(project: str, query: str) -> list:
                 seen.add(chunk["chunk_id"])
                 unique_chunks.append(chunk)
                 
-    return unique_chunks
+    # FIX: Use the imported FINAL_TOP_N (8) for the validated pipeline threshold
+    reranked_chunks = rerank(query, unique_chunks, top_n=FINAL_TOP_N)
+                
+    return reranked_chunks

@@ -18,7 +18,7 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 # ==========================================================
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
-
+EMBEDDING_DIM = 1536
 # ===========================================================
 # 🌲 Vector Store Settings
 # ===========================================================
@@ -29,7 +29,8 @@ PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX", "delivery-risk-assistant")
 # ===========================================================
 MAX_CHUNK_CHARS = 600
 MIN_EVIDENCE_CHUNKS = 2
-DEFAULT_TOP_K = 2
+DEFAULT_TOP_K = 5      
+FINAL_TOP_N = 8         # The final number of chunks to keep after reranking
 
 # ===========================================================
 # 🔍 Multi-Angle Retrieval Prompts

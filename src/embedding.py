@@ -88,8 +88,8 @@ def build_vector_store(chunks: list[dict], batch_size: int = 50):
     of how semantically similar the text is.
 
     Deletes and re-upserts each project's namespace on every run so
-    re-running after editing data/ doesn't leave stale or duplicate
-    vectors behind. Use this for the static demo corpus (data/); for
+    re-running after editing knowledge_base/ doesn't leave stale or duplicate
+    vectors behind. Use this for the static demo corpus (knowledge_base/); for
     adding one new document to an already-built index without wiping it,
     use add_document_to_project() instead.
     """
@@ -120,7 +120,7 @@ def add_document_to_project(chunks: list[dict], project: str, batch_size: int = 
     EXISTING project namespace, WITHOUT deleting what's already there.
     This is the non-destructive counterpart to build_vector_store(), used
     when someone uploads a new document into a project through the app
-    instead of rebuilding the whole demo corpus from data/.
+    instead of rebuilding the whole demo corpus from knowledge_base/.
     """
     index = _ensure_index()
     _upsert_chunks(index, chunks, project, batch_size)

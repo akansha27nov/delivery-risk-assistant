@@ -1,14 +1,14 @@
 """
 Document loading.
 
-Reads every file in data/ and normalizes it into one of two shapes, with a
+Reads every file in knowledge_base/ and normalizes it into one of two shapes, with a
 "project" tag attached so results never get jumbled across projects later:
   - text/markdown -> {"source", "type": "text", "content", "project"}
   - CSV           -> {"source", "type": "csv", "rows", "project"}
 
 Project assignment comes from project_manifest.json, NOT filename guessing
-(e.g. "starts with nova_") -- every file in data/ must be explicitly listed
-there. If a new file is added to data/ without being added to the
+(e.g. "starts with nova_") -- every file in knowledge_base/ must be explicitly listed
+there. If a new file is added to knowledge_base/ without being added to the
 manifest, loading fails loudly instead of silently leaving it untagged and
 letting it bleed into the wrong project's risk analysis.
 """
@@ -18,7 +18,7 @@ import io
 import json
 from pathlib import Path
 
-DATA_DIR = Path(__file__).parent.parent / "data"
+DATA_DIR = Path(__file__).parent.parent / "knowledge_base"
 MANIFEST_PATH = Path(__file__).parent.parent / "project_manifest.json"
 
 TEXT_EXTENSIONS = {".md", ".txt"}
@@ -45,7 +45,7 @@ def load_documents(data_dir: Path = DATA_DIR, manifest_path: Path = MANIFEST_PAT
 
         if path.name not in file_to_project:
             raise ValueError(
-                f"'{path.name}' is in data/ but not listed in "
+                f"'{path.name}' is in knowledge_base/ but not listed in "
                 f"project_manifest.json. Add it under the correct project's "
                 f"\"files\" list before loading."
             )

@@ -48,15 +48,21 @@ def rerank(query: str, chunks: list[dict], top_n: int = 5) -> list[dict]:
 
 
 if __name__ == "__main__":
-    from retrieval import retrieve
+    import asyncio
+    from retrieval import query_single_angle
 
-    query = "Is anything blocking the launch?"
-    for project in ["atlas", "nova"]:
-        candidates = retrieve(query, project=project, k=8)
-        top = rerank(query, candidates, top_n=5)
+    async def test_reranking_standalone():
+        query = "Is anything blocking the launch?"
+        for project in ["atlas", "nova"]:
+            # Fetch a raw pool of candidates to test the reranker
+            candidates = await query_single_angle("blockers", query, namespace=project, top_k=8)
+            top = rerank(query, candidates, top_n=5)
 
-        print(f"=== Project: {project} ===")
-        print(f"Reranked top {len(top)} of {len(candidates)} candidates for: '{query}'\n")
-        for c in top:
-            print(f"  [{c['location']}] rerank_score={c['rerank_score']:.3f}")
-            print(f"    {c['text'][:100]}...\n")
+            print(f"=== Project: {project} ===")
+            print(f"Reranked top {len(top)} of {len(candidates)} candidates for: '{query}'\n")
+            for c in top:
+                print(f"  [{c['location']}] rerank_score={c['rerank_score']:.3f}")
+                print(f"    {c['text'][:100]}...\n")
+
+    # Execute the async test loop
+    asyncio.run(test_reranking_standalone())

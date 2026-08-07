@@ -6,12 +6,20 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 from pinecone import Pinecone, ServerlessSpec
+from config import (
+    OPENAI_API_KEY,
+    PINECONE_API_KEY,
+    PINECONE_INDEX_NAME,
+    EMBEDDING_MODEL,
+    EMBEDDING_DIM
+)
+from rerank import rerank 
 
 load_dotenv()
 
-EMBEDDING_MODEL = "text-embedding-3-small"
-EMBEDDING_DIM = 1536  # dimension for text-embedding-3-small
-INDEX_NAME = os.environ.get("PINECONE_INDEX_NAME", "delivery-risk-assistant")
+openai_client = OpenAI(api_key=OPENAI_API_KEY)
+pc = Pinecone(api_key=PINECONE_API_KEY)
+INDEX_NAME = pc.Index(PINECONE_INDEX_NAME)
 
 openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])

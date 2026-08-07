@@ -23,6 +23,7 @@ RISK_ANGLES = [
     "blockers, dependencies, or blocked tickets that could delay delivery",
     "scope changes or new work added outside of original sprint planning",
     "team capacity, workload, morale, or attrition signals",
+    "SEV-1 incidents, postmortems, outages, or unassigned critical remediation tickets", # Explicit SEV-1 angle
     "status updates and whether they match the evidence in tickets and discussions",
 ]
 

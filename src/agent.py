@@ -207,18 +207,25 @@ def analyse_risks(chunks: list[dict]) -> list[dict]:
     return _parse_risks_response(raw)
  
  
-def validate_citations(risks: list[dict], known_chunk_ids: set[str]) -> list[dict]:
+def validate_citations(risks: list[dict], evidence) -> list[dict]:
     """
-    Validates both citations and structural requirements (cost estimate & confidence tag).
-    Any risk lacking a valid citation or missing a confidence tag gets marked invalid.
+    Validates citations, cost estimates, and confidence tags.
+    'evidence' can be a list of chunk dicts (from graph execution) 
+    or a set/iterable of known chunk ID strings (from unit tests).
     """
+    # Handle both list of dicts and pre-built sets/iterables of IDs
+    if evidence and isinstance(next(iter(evidence), None), dict):
+        known_ids = {c.get("chunk_id") for c in evidence}
+    else:
+        known_ids = set(evidence) if evidence else set()
+
     validated = []
     for r in risks:
         # Check citations
         valid_cites = [c for c in r.get("citations", []) if c in known_ids]
         has_valid_citation = len(valid_cites) > 0
         
-        # Check structural requirements
+        # Check structural requirements (must not be None)
         has_cost = r.get("cost_estimate") is not None
         has_confidence = r.get("confidence_tag") is not None
         

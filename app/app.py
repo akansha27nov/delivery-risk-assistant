@@ -10,6 +10,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../src"
 
 from graph import build_graph
 from retrieval import gather_evidence_async
+from ingestion import build_document_from_upload
+from chunking import chunk_documents
+from embedding import add_document_to_project
 
 load_dotenv()
 
@@ -27,6 +30,63 @@ st.markdown("Automated multi-angle risk extraction, cost/impact estimation, cita
 # ==========================================
 st.sidebar.header("1. Audit Configuration")
 project_choice = st.sidebar.selectbox("Select Project Scope", options=["atlas", "nova"], index=0)
+
+# ==========================================
+# UPLOAD: Add a new document into the selected project's live index
+# ==========================================
+if "upload_status" not in st.session_state:
+    st.session_state.upload_status = None
+
+with st.sidebar.expander(f"➕ Upload a document into '{project_choice}'", expanded=False):
+    uploaded_file = st.file_uploader(
+        "Add a new sprint report, ticket export, or transcript",
+        type=["md", "txt", "csv"],
+        help=(
+            "Embeds this document directly into the "
+            f"'{project_choice}' project's live knowledge base, "
+            "without touching any other project or document."
+        ),
+        key=f"uploader_{project_choice}",
+    )
+    add_doc_clicked = st.button(
+        "Add to Knowledge Base",
+        disabled=uploaded_file is None,
+        key="add_to_kb",
+    )
+
+    if add_doc_clicked and uploaded_file is not None:
+        with st.spinner(f"Embedding '{uploaded_file.name}' into '{project_choice}'..."):
+            try:
+                raw_text = uploaded_file.getvalue().decode("utf-8")
+                doc = build_document_from_upload(uploaded_file.name, raw_text, project_choice)
+                new_chunks = chunk_documents([doc])
+                add_document_to_project(new_chunks, project_choice)
+                st.session_state.upload_status = {
+                    "ok": True,
+                    "message": (
+                        f"Added '{uploaded_file.name}' — {len(new_chunks)} new chunk(s) "
+                        f"embedded into '{project_choice}'."
+                    ),
+                }
+                # Any evidence/results already on screen were retrieved before
+                # this document existed -- clear them so a stale audit can't
+                # be mistaken for one that reflects the new document.
+                st.session_state.retrieved_evidence = []
+                st.session_state.audit_result = None
+            except (UnicodeDecodeError, ValueError) as e:
+                st.session_state.upload_status = {"ok": False, "message": str(e)}
+            except Exception as e:
+                st.session_state.upload_status = {
+                    "ok": False,
+                    "message": f"Embedding failed: {e}",
+                }
+
+    if st.session_state.upload_status:
+        if st.session_state.upload_status["ok"]:
+            st.success(st.session_state.upload_status["message"])
+        else:
+            st.error(st.session_state.upload_status["message"])
+
 user_question = st.sidebar.text_input(
     "Audit Query", 
     value="What are this week's top delivery risks and blockers?"

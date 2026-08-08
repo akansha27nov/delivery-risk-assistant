@@ -19,10 +19,7 @@ load_dotenv()
 
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 pc = Pinecone(api_key=PINECONE_API_KEY)
-INDEX_NAME = pc.Index(PINECONE_INDEX_NAME)
-
-openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
+INDEX_NAME = PINECONE_INDEX_NAME  # the plain string name -- pc.Index(...) is created on demand below, not stored here
 
 
 def _embed(texts: list[str]) -> list[list[float]]:

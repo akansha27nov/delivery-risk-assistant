@@ -233,13 +233,26 @@ def analyse_risks(chunks: list[dict]) -> list[dict]:
  
 def validate_citations(risks: list[dict], evidence) -> list[dict]:
     """
-    Validates citations, impact breakdown, and computes transparent Evidence Confidence 
+    Validates citations, impact breakdown, and computes transparent Evidence Confidence
     using objective retrieval and validation metrics.
+
+    Retrieval quality is computed as a PERCENTILE RANK within the actual evidence
+    pool gathered for this query, not a fixed absolute score threshold. Cohere's
+    rerank score is not a calibrated 0-1 confidence value -- real scores observed
+    across this corpus range roughly 0.01-0.45, so a fixed "High >= 0.8" cutoff
+    would label every single risk "Low" regardless of whether it's actually the
+    strongest or weakest evidence retrieved. Percentile rank answers a question
+    the raw score can't: was this risk's evidence more or less relevant than the
+    rest of what was retrieved for this same query?
     """
     evidence_map = {}
+    all_scores = []
     if evidence and isinstance(next(iter(evidence), None), dict):
         evidence_map = {c.get("chunk_id"): c for c in evidence}
         known_ids = set(evidence_map.keys())
+        all_scores = [
+            c.get("rerank_score", c.get("score", 0.0)) for c in evidence
+        ]
     else:
         known_ids = set(evidence) if evidence else set()
 
@@ -247,51 +260,54 @@ def validate_citations(risks: list[dict], evidence) -> list[dict]:
     for r in risks:
         valid_cites = [c for c in r.get("citations", []) if c in known_ids]
         has_valid_citation = len(valid_cites) > 0
-        
+
         has_impact = r.get("impact_breakdown") is not None
         has_confidence_tag = r.get("confidence_tag") is not None
-        
+
         is_valid = has_valid_citation and has_impact and has_confidence_tag
-        
+
         # ==========================================
-        # EVIDENCE CONFIDENCE HEURISTIC (New Weights)
+        # EVIDENCE CONFIDENCE HEURISTIC
         # ==========================================
         # Base weight: 20%
         base_score = 20.0
-        
+
         # 1. Citation Validation: 30%
         citation_score = 30.0 if has_valid_citation else 0.0
-        
+
         # 2. Number of Supporting Documents: 25% max (scaled by count)
         # Dedupe by source file, not by chunk -- two citations from the
-        # same document (e.g. two rows of the same CSV) is one source of
-        # corroboration, not two, and the UI label says "docs" not "chunks".
+        # same document is one source of corroboration, not two.
         num_citations = len(valid_cites)
         unique_docs = len({c.split("::")[0] for c in valid_cites})
         supporting_docs_score = min(unique_docs * 8.33, 25.0)
-        
-        # 3. Average Rerank Score: 25% max
-        avg_rerank = 0.5
-        if evidence_map and num_citations > 0:
-            rerank_scores = [
-                evidence_map.get(c, {}).get("rerank_score", evidence_map.get(c, {}).get("score", 0.5)) 
+
+        # 3. Retrieval quality, as a percentile rank within THIS query's
+        # evidence pool: 25% max
+        percentile = 0.5
+        if evidence_map and num_citations > 0 and all_scores:
+            cited_scores = [
+                evidence_map.get(c, {}).get("rerank_score", evidence_map.get(c, {}).get("score", 0.0))
                 for c in valid_cites
             ]
-            avg_rerank = sum(rerank_scores) / len(rerank_scores) if rerank_scores else 0.5
-        rerank_score_component = avg_rerank * 25.0
-        
+            avg_cited_score = sum(cited_scores) / len(cited_scores)
+            percentile = sum(1 for s in all_scores if avg_cited_score >= s) / len(all_scores)
+        rerank_score_component = percentile * 25.0
+
         total_score = base_score + citation_score + supporting_docs_score + rerank_score_component
         evidence_confidence = int(min(max(total_score, 10), 99))
-        
-        # Determine human-readable retrieval quality label
-        if avg_rerank >= 0.8:
+
+        # Human-readable retrieval quality label, based on percentile rank
+        # (top third / middle third / bottom third of THIS query's pool),
+        # not an absolute score comparison.
+        if percentile >= 0.66:
             retrieval_quality = "High"
-        elif avg_rerank >= 0.5:
+        elif percentile >= 0.33:
             retrieval_quality = "Medium"
         else:
             retrieval_quality = "Low"
         # ==========================================
-        
+
         r["valid"] = is_valid
         r["citations"] = valid_cites
         r["evidence_confidence"] = evidence_confidence
@@ -301,5 +317,5 @@ def validate_citations(risks: list[dict], evidence) -> list[dict]:
             "retrieval_quality": retrieval_quality
         }
         validated.append(r)
-        
+
     return validated

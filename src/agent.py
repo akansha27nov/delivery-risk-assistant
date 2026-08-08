@@ -263,8 +263,12 @@ def validate_citations(risks: list[dict], evidence) -> list[dict]:
         citation_score = 30.0 if has_valid_citation else 0.0
         
         # 2. Number of Supporting Documents: 25% max (scaled by count)
+        # Dedupe by source file, not by chunk -- two citations from the
+        # same document (e.g. two rows of the same CSV) is one source of
+        # corroboration, not two, and the UI label says "docs" not "chunks".
         num_citations = len(valid_cites)
-        supporting_docs_score = min(num_citations * 8.33, 25.0)
+        unique_docs = len({c.split("::")[0] for c in valid_cites})
+        supporting_docs_score = min(unique_docs * 8.33, 25.0)
         
         # 3. Average Rerank Score: 25% max
         avg_rerank = 0.5
@@ -293,7 +297,7 @@ def validate_citations(risks: list[dict], evidence) -> list[dict]:
         r["evidence_confidence"] = evidence_confidence
         r["confidence_breakdown"] = {
             "citation_valid": has_valid_citation,
-            "num_docs": num_citations,
+            "num_docs": unique_docs,
             "retrieval_quality": retrieval_quality
         }
         validated.append(r)

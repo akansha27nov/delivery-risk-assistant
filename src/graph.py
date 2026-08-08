@@ -56,8 +56,11 @@ def analyse_risks_node(state: GraphState) -> GraphState:
     return {**state, "risks": risks}
 
 def validate_citations_node(state: GraphState) -> GraphState:
-    known_ids = {c["chunk_id"] for c in state["evidence"]}
-    validated = validate_citations(state["risks"], known_ids)
+    # Pass the full evidence chunk list (not just chunk_ids) so
+    # validate_citations() can compute a real retrieval-quality score
+    # from each citation's actual rerank_score, instead of falling back
+    # to a hardcoded default.
+    validated = validate_citations(state["risks"], state["evidence"])
     citation_missing = any(not r["valid"] for r in validated)
     return {**state, "risks": validated, "citation_missing": citation_missing}
 
@@ -98,7 +101,11 @@ def route_to_hitl(state: dict) -> dict:
     risks = state.get("risks", state.get("result", {}).get("risks", []))
     
     risk_summary = "\n".join(
-        [f"• {r.get('risk')} (Cost: {r.get('cost_estimate', 'N/A')})" for r in risks]
+        [
+            f"• {r.get('risk')} "
+            f"(Business impact: {r.get('impact_breakdown', {}).get('business_impact', 'N/A')})"
+            for r in risks
+        ]
     )
     
     telegram_message = (

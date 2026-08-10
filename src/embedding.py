@@ -129,7 +129,7 @@ def get_index():
     return pc.Index(INDEX_NAME)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":    # pragma: no cover
     from chunking import chunk_documents
     from ingestion import load_documents
 

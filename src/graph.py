@@ -235,7 +235,7 @@ def export_workflow_diagrams(png_output_path: str = "docs/workflow_diagram.png")
         
     return mermaid_syntax
 
-if __name__ == "__main__":
+if __name__ == "__main__":     # pragma: no cover
     print("=== Programmatically Exporting LangGraph Workflow ===")
     code = export_workflow_diagrams()
     print("\nGenerated Mermaid Code:")

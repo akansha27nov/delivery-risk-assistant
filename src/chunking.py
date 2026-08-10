@@ -83,7 +83,7 @@ def chunk_documents(documents: list[dict], max_chars: int = MAX_CHARS) -> list[d
     return all_chunks
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":   # pragma: no cover
     from ingestion import load_documents
 
     docs = load_documents()

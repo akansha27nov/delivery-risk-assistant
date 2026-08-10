@@ -47,7 +47,7 @@ def rerank(query: str, chunks: list[dict], top_n: int = 5) -> list[dict]:
     return reranked
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":      # pragma: no cover
     import asyncio
     from retrieval import query_single_angle
 

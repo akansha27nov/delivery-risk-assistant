@@ -1,65 +1,81 @@
-# 🛡️ AI-Powered Delivery Risk Assistant: Transforming Project Visibility
+# 🛡️ AI-Powered Delivery Evidence Auditor
 
 ## The Problem: The "Watermelon" Status Report
 
-In complex software delivery, project statuses often resemble a **watermelon**: green on the outside, but red on the inside.
+**Status reports have a watermelon problem: green on the outside, red on the inside.**
 
-Engineering teams update Jira, discuss blockers in daily standups, and resolve incidents in postmortems. By the time that information is manually consolidated into weekly status reports, critical risks are often hidden or softened. A sprint report may say *"on track"*, while a Slack thread reveals a dependency that threatens the entire release.
+Imagine a programme lead receives a weekly status report saying a project is on track.
 
-By the time leadership spots the contradiction, the deadline is already compromised.
+But somewhere else, in a ticket export, there's a critical dependency that's blocked. And in a standup transcript, an engineer says they don't expect to make the deadline.
 
----
+All of that information exists. 
 
-# The Solution
+Existing delivery platforms are getting increasingly good at analysing the data inside the systems they connect to. My hypothesis is that an important gap remains between those systems and the narrative information around them — status reports, meeting transcripts, postmortems and other unstructured artefacts.
 
-The **Delivery Risk Assistant** is a production-grade AI auditing pipeline that automatically cross-references sprint reports, standup transcripts, emails, and ticketing systems to detect hidden risks, scope creep, and status contradictions in real time.
+I'm interested in whether AI can audit that narrative against the underlying evidence rather than simply summarising it.
 
-The system replaces manual reporting with grounded, evidence-backed project intelligence.
-
----
-
-# 🔑 Key Differentiators & Capabilities
-
-## 1. Multi-Angle Semantic Retrieval (RAG)
-
-The assistant simultaneously analyzes project information across multiple dimensions:
-
-- Blocked dependencies and delivery delays
-- Mid-sprint scope additions
-- Team capacity and velocity trends
-- Unassigned SEV-1 incidents and P0 bugs
-- Contradictions between reported status and engineering evidence
-
-## 2. Grounded Impact & Cost Estimation
-
-Every detected risk includes a business impact estimate with confidence markers (such as `directional_estimate`) so leadership understands whether the estimate is qualitative or quantitative.
-
-## 3. Anti-Hallucination Citation Validation
-
-Every AI-generated finding is traced back to supporting evidence. If a claim cannot be matched to a valid source chunk, it is rejected before being presented.
-
-## 4. Deterministic Human-in-the-Loop Routing
-
-A LangGraph decision workflow evaluates every risk. High-severity incidents and status contradictions automatically trigger an escalation to the Delivery Manager via Telegram, including supporting context.
+And that's the problem I want to explore with my **AI Delivery Evidence Auditor**
 
 ---
 
-# 📈 Business Impact & ROI
+# The Proposal
 
-## Prevent Missed Deadlines
+The idea is to take project artefacts such as sprint reports, ticket exports, standup transcripts and status documents, and use AI to cross-reference them and surface the delivery risks that might otherwise be missed.
 
-Detects delivery risks early enough for leadership to intervene before schedules are impacted.
+I'm particularly interested in three types of signals:
 
-## Control Engineering Costs
+1. **Delivery risks** — things like blocked dependencies, capacity problems or deadlines at risk.
 
-Identifies undocumented scope changes and engineering effort diverted from planned work, improving resource allocation.
+2. **Scope risks** — for example, work being added during a sprint without a corresponding change to the timeline.
 
-## Improve Cross-Team Visibility
+3. **Status contradictions** — where the official status says one thing, but the underlying evidence suggests something different.
 
-Combines information from Jira, Slack, emails, standups, and reports into a single evidence-backed view of delivery health.
+But there is a second problem I want the project to address.
+
+# How do we trust an AI-generated risk?
+
+I don't want to build another chatbot where the user simply has to trust the model's answer.
+
+My design principle is:
+
+**If the system can't show me the evidence behind a risk, it shouldn't report that risk.**
+
+So I'm proposing a RAG-based architecture that retrieves relevant evidence and then validates that every finding has a traceable citation.
+
+I'm also planning a **context-consistency** check because there's an interesting failure mode here: two pieces of information can both be individually true but belong to completely different projects or teams. The system shouldn't combine them into one risk simply because they appear semantically related.
+
+For high-stakes findings, such as a SEV-1 incident or a contradiction between reported status and underlying evidence, I also don't want the AI making the final escalation decision autonomously.
+
+The proposal is therefore to have a deterministic decision layer and a human approval step before those findings reach the leadership report.
+
+# The proposed technology
+
+I'm planning to use **Pinecone and Cohere for retrieval, LangGraph for workflow orchestration, Pydantic for structured outputs, and Streamlit for the interface,** with Telegram providing the human-in-the-loop approval mechanism.
+
+But the technology isn't the hypothesis I'm trying to prove.
+
+The hypothesis is whether AI can reliably connect distributed project evidence while remaining grounded and explainable enough to support delivery decisions.
+
+I don't have access to real company Jira or Slack data, so the initial version will use **synthetic but deliberately designed project artefacts** — including known risks, clean cases and contradiction cases.
+
+That actually gives me something valuable for the MVP: I can define the expected outcome beforehand and evaluate whether the system gets it right.
+
+# MVP Goal
+My goal isn't to claim that the AI will detect every possible delivery risk.
+
+**The goal of the MVP is to demonstrate whether we can use AI to connect distributed project evidence while putting explicit controls around grounding, context and high-stakes decisions.**
+
+If that works, the next step would be a pilot with real project data and eventually live integrations with systems such as Jira or Slack.
 
 ---
 
-# 🚀 The Ask
+# Conclusion
 
-The architecture—including vector ingestion, semantic retrieval, LangGraph routing, Telegram escalation, and an interactive dashboard—is operational and ready to ingest historical delivery data to establish a baseline and demonstrate measurable ROI during future sprint cycles.
+So the question I'm ultimately exploring is not:
+
+**"Can AI summarize project information?"**
+
+It's:
+
+**"How can we safely use AI to improve operational decision-making without treating the AI itself as the source of truth?"**
+

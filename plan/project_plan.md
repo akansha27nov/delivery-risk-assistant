@@ -37,7 +37,7 @@
 - Needs external knowledge: Yes → RAG (Pinecone).
 - Interacts with external systems: Yes → tool integrations (Pinecone, Cohere Rerank, Telegram Bot API — beyond the core LLM).
 - Needs multi-step reasoning: Yes → LangGraph, with **deterministic conditional routing rather than a ReAct tool-use loop**. The two decisions in this pipeline that matter most for trust (severity escalation, evidence-context consistency) are implemented as explicit, testable rules specifically *because* they're high-stakes — the same rationale a ReAct loop would need to earn its way past. A ReAct-style loop was considered for the evidence-gathering step itself (letting the model decide which queries to issue and when it has "enough"), but rejected for MVP: it would trade a validated, deterministic multi-angle retrieval sweep (already tuned and tested against a known ground-truth corpus) for a non-deterministic loop whose stopping behavior is harder to test and explain. Same principle applied consistently, not just to severity.
-- Integrates with business systems: **Not required for MVP.** The project brief treats n8n as required only if chosen as the *primary* stack; since LangGraph is primary, n8n is explicitly optional ("a thin n8n webhook/trigger is allowed, but the brains stay in LangGraph"). LangGraph handles orchestration natively, and Streamlit serves as the interactive trigger surface.
+- Integrates with business systems: **Yes, scoped narrowly.** LangGraph remains primary orchestration for all reasoning; n8n is adopted as a thin, optional scheduling and delivery layer — a weekly Schedule Trigger that invokes the existing pipeline and posts the result to Notion ahead of a recurring leadership meeting. This is not orchestration duplication: n8n never touches retrieval, reasoning, or the severity decision tree, it only triggers the already-complete pipeline on a cadence and formats/delivers the output. Chosen because n8n's native cron trigger and Notion integration remove the need to hand-build scheduling and delivery infrastructure for this project.
 - Autonomous: **Partially, by design.** Autonomous end-to-end for the majority path (retrieval through report generation); a deliberate human checkpoint (Telegram HITL) exists specifically for the highest-stakes findings (SEV-1, contradictions). Full autonomy everywhere except where the cost of an autonomous mistake is highest.
 
 **Stack**:
@@ -50,6 +50,7 @@
 - Human-in-the-loop: Telegram Bot API for approval of high-severity findings.
 - Workflow visualisation: LangGraph's native Mermaid/PNG export.
 - File ingestion: interactive `.md` / `.txt` / `.csv` upload pipeline that chunks, embeds, and upserts into the target Pinecone namespace without disturbing existing vectors.
+- Scheduled delivery: n8n workflow (Schedule Trigger → Execute Command → Notion node) that runs the pipeline across all projects every Thursday morning and posts a combined report to Notion ahead of the leadership meeting, with any risk still awaiting Telegram HITL approval at post time clearly labeled "Pending human review" rather than presented as confirmed.
 
 **Justification**:
 - Moving severity routing to an explicit binary decision tree (not an LLM judgment call) makes the highest-stakes decision in the pipeline fully deterministic and auditable — testable with fixed inputs/outputs, and free of LLM inconsistency on the one step where consistency matters most.
@@ -61,7 +62,7 @@
 - **Multi-agent framing** — dropped; the underlying node separation is preserved without being marketed as separate agents.
 - **n8n as primary or secondary orchestration** — dropped for MVP; explicitly optional per the brief once LangGraph is primary, and would add integration surface without changing the core story. Revisit only if a real live-ticketing-system trigger becomes a requirement (see Nice-to-have).
 - **ReAct-style agentic retrieval loop** — dropped for MVP in favor of a deterministic multi-angle retrieval sweep, validated against a known ground-truth corpus; same explainability rationale applied to severity routing, applied consistently to evidence-gathering.
-- **Live Jira/Slack/email integrations** — excluded from MVP; synthetic artefacts are sufficient to demonstrate and evaluate the concept.
+- **Live Jira/Slack/email integrations** — excluded from MVP; synthetic artefacts are sufficient to demonstrate and evaluate the concept, confirmed acceptable by the instructor.
 
 ---
 
@@ -75,7 +76,7 @@
 - Binary decision tree: explicit rule checks; `is_sev1` or `is_contradiction` routes a finding to escalation.
 - Telegram HITL approval gate for high-severity findings.
 - Four-dimensional business impact breakdown (Delivery, Customer, Business/Revenue, Team) via Pydantic-enforced schema.
-- Transparent evidence-confidence score: a deterministic heuristic (citation validity, source corroboration, Cohere rerank *percentile* — not an absolute score threshold, which testing showed was unreliable — plus a base weight).
+- Transparent evidence-confidence score: a deterministic heuristic (citation validity, source corroboration, Cohere rerank *percentile* — not an absolute score threshold — plus a base weight).
 - Actionable recommendations per risk.
 - Executive summary dashboard and interactive evidence inspector (raw chunks, source locations, rerank scores).
 - Dynamic document ingestion (`.md` / `.txt` / `.csv`) into an existing project's live namespace.
@@ -83,7 +84,7 @@
 
 **Excluded from MVP**: live ticketing-system integration, multi-run trend analysis, multi-format/stakeholder-differentiated reports, real (non-synthetic) enterprise data, n8n orchestration, agentic ReAct retrieval loop.
 
-**Justification**: proves the core value question — can grounded, contradiction-aware risk auditing be done reliably and explainably at all — before investing in infrastructure (live connectors, trend analysis) whose value depends on the core reasoning already working. The riskiest part isn't infrastructure, it's whether grounding and context-consistency hold up under adversarial testing; that was validated directly (Section 7) before expanding scope further.
+**Justification**: proves the core value question — can grounded, contradiction-aware risk auditing be done reliably and explainably at all — before investing in infrastructure (live connectors, trend analysis) whose value depends on the core reasoning working correctly. The riskiest part isn't infrastructure, it's whether grounding and context-consistency hold up under adversarial testing; that was validated directly before expanding scope further.
 
 **MVP specific success metrics**:
 - No risk reaches the final report without a valid, existing citation.
@@ -99,8 +100,8 @@
 |---|---|---|---|---|
 | Technical | Binary decision tree misses a real severity signal outside its explicit rules | Medium | Medium | Documented as a known MVP boundary; a supplementary soft-signal LLM check is a possible v2 extension, not pretended to be exhaustive now |
 | Technical | Cost-analysis step fabricates a dollar figure with no source basis | Medium | High | Four-dimensional impact structure plus confidence tagging; unsupported numeric claims are rejected structurally, same mechanism as citation validation |
-| Technical | **Evidence from an unrelated project/team is combined into a valid-looking risk** | Medium | High | **Found during real testing, not hypothetically.** Context-aware evidence-consistency guardrail checks entity/context compatibility before a risk can be accepted; incompatible evidence is rejected with the specific mismatch shown |
-| Technical | Dynamically uploaded documents get assigned to the wrong project namespace | Low–Medium | High | Controlled namespace/project selection at upload time; deliberately tested with a mis-scoped document (see Section 7) |
+| Technical | Evidence from an unrelated project/team is combined into a valid-looking risk | Medium | High | Context-aware evidence-consistency guardrail checks entity/context compatibility before a risk can be accepted; incompatible evidence is rejected with the specific mismatch shown |
+| Technical | Dynamically uploaded documents get assigned to the wrong project namespace | Low–Medium | High | Controlled namespace/project selection at upload time; deliberately tested with a mis-scoped document |
 | Technical | HITL gate over- or under-triggers relative to the intended severity threshold | Medium | Medium | Tested against fixed synthetic cases with known expected routing outcomes |
 | Technical | Telegram approval step blocks the pipeline indefinitely with no response | Low | Medium | Timeout with a defined fallback state (marked pending, not silently dropped) |
 | Data | Synthetic evaluation does not represent production enterprise variability | Medium | Medium | Explicit in documentation: the MVP demonstrates architecture and controlled behavior, not production-scale detection accuracy; a diverse synthetic corpus with deliberate edge cases mitigates but doesn't remove this |
@@ -118,9 +119,9 @@
 | V1 | Prove retrieval quality is sufficient | A single generic query surfaces the right evidence across risk categories | Found false: single-query retrieval missed whole risk categories (scope creep, status contradictions) | Multi-angle retrieval (pooled, deduplicated, reranked), Cohere rerank integration |
 | V2 | Prove reasoning catches what retrieval alone can't | The reasoning layer can detect contradictions and scope creep given the right evidence, not just list retrieved facts | Verified against planted ground-truth cases: contradiction case caught, scope-creep case caught, negative control (resolved issue) correctly not flagged | Structured risk schema, four-dimensional impact breakdown, confidence tagging, percentile-based evidence-confidence scoring |
 | V3 | Prove trust mechanisms hold under adversarial testing | Grounding and context checks catch a real failure, not just a designed test case | **Found true the hard way**: an unrelated-project document uploaded into the live corpus was cited alongside real evidence as if corroborating one claim. Context-consistency guardrail built and verified to catch and reject this exact case | Binary severity decision tree, Telegram HITL routing, context-aware evidence-consistency guardrail, dynamic document upload |
-| V4 | Prove the system is demo- and evaluation-ready | A fixed synthetic test suite with known expected outcomes passes end-to-end, and the system is explainable to someone other than the builder | *In progress* | Automated evaluation harness, saved sample reports, README as product case study, demo preparation |
+| V4 | Prove the system is demo and evaluation-ready | A fixed synthetic test suite with known expected outcomes passes end-to-end, and the system is explainable to someone other than the builder | *In progress* | Automated evaluation harness, saved sample reports, README as product case study, demo preparation |
 
-**Timeline**: 5-day core build window (per bootcamp schedule), with V0–V3 complete and V4 (evaluation harness, documentation, demo) as the remaining work.
+**Timeline**: 5-day core build window
 
 **Dependencies**: V1's multi-angle retrieval depends on V0's chunking/citation pipeline being stable; V2's reasoning layer depends on V1 supplying genuinely relevant evidence; V3's trust guardrails depend on V2's structured risk schema; V4's evaluation depends on V3's guardrails being stable enough to test against fixed cases.
 
@@ -144,21 +145,3 @@
 - The known cross-project contamination case is correctly rejected by the context-consistency guardrail.
 - At least one full end-to-end run completes successfully across the synthetic corpus with correctly cited risks and appropriately tagged impact estimates.
 - A reviewer can trace any reported finding back to its exact source text without needing to trust the system's own summary of it.
-
----
-
-## 7. Current Project Status
-
-**MVP implementation: core pipeline complete; evaluation harness and demo packaging remaining (V4).**
-
-**Strongest technical differentiators**:
-1. Grounded evidence — every risk ties to an inspectable source chunk.
-2. Context-aware validation — closes a real failure mode (cross-project evidence contamination) discovered during adversarial self-testing, not a hypothetical edge case.
-3. Deterministic high-stakes routing — severity escalation is rule-based, not an LLM judgment call.
-4. Human-in-the-loop — high-severity findings require approval before reaching leadership.
-5. Structured, confidence-tagged business impact instead of an unstructured LLM paragraph.
-6. Transparent, relative (percentile-based) confidence scoring instead of an uncalibrated absolute score.
-
-**Positioning**: an evidence-auditing pipeline that analyzes project artefacts, detects grounded delivery risks and contradictions, explains business impact, and routes high-severity findings to a human before they reach leadership. It is **not** a replacement for Jira or another system of record — it's an intelligence and synthesis layer over delivery information that a system of record doesn't provide on its own.
-
-**Deliberately excluded, and why**: n8n orchestration and a ReAct-style retrieval loop were both considered and dropped for MVP (Section 2) — not omissions, documented trade-offs consistent with the project's core design principle of using determinism wherever correctness and explainability matter more than flexibility.

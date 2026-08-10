@@ -1,0 +1,247 @@
+{
+  "name": "Risk auditor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                4
+              ],
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "cefaa21e-d550-44f4-abf4-b09f3f6652d6",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  { json: { project: \"atlas\" } },\n  { json: { project: \"nova\" } }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "59e6b9e3-2bb7-42ed-a5db-5d99c682e33f",
+      "name": "Projects"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://yellow-bobcats-add.loca.lt/run-audit",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"project\": \"{{ $json.project }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        416,
+        0
+      ],
+      "id": "356f6aee-299c-4898-8f02-441b4d11ce59",
+      "name": "Fetch project data"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        624,
+        0
+      ],
+      "id": "8ef35569-d987-4085-812f-924afb40c7d8",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "jsCode": "const firstInput = $input.first().json;\nconst projectList = firstInput.data || [];\n\nlet masterMarkdown = \"🛡️ EXECUTIVE DELIVERY AUDIT — MASTER BRIEFING\\n\";\nmasterMarkdown += `Audit Date: ${new Date().toISOString().split('T')[0]}\\n\\n`;\nmasterMarkdown += \"========================================\\n\\n\";\n\nfor (const projData of projectList) {\n  const projectName = (projData.project || \"UNKNOWN\").toUpperCase();\n  \n  let reportText = (projData.report_markdown || \"No report data found.\")\n    .replace(/^#+\\s/gm, '')         \n    .replace(/\\*\\*(.*?)\\*\\*/g, '$1') \n    .replace(/__(.*?)__/g, '$1')     \n    .replace(/>\\s?/g, '')            \n    .replace(/---\\n?/g, '\\n');       \n\n  masterMarkdown += `PROJECT: ${projectName}\\n`;\n  masterMarkdown += reportText;\n  masterMarkdown += \"\\n\\n========================================\\n\\n\";\n}\n\nreturn [{\n  json: {\n    master_title: `🛡️ Executive Briefing — All Projects [${new Date().toISOString().split('T')[0]}]`,\n    master_markdown: masterMarkdown\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        0
+      ],
+      "id": "03c8d17b-043f-4b11-93f1-10c91638b182",
+      "name": "Create a master report"
+    },
+    {
+      "parameters": {
+        "pageId": {
+          "__rl": true,
+          "value": "3b86e3e41548806cbaa3d8f10a5b5ab3",
+          "mode": "id"
+        },
+        "title": "={{ $json.master_title }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        1024,
+        112
+      ],
+      "id": "dae6f155-2de9-4d02-8e69-a36d64b9c541",
+      "name": "Create report page in Notion",
+      "credentials": {
+        "notionApi": {
+          "id": "qNNrMt0J1jDlYZ0O",
+          "name": "Akansha Notion"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Get the Page ID from the Notion node right before this\nconst pageId = $('Create report page in Notion').first().json.id;\n\n// 2. Pull the master markdown from the report-building node\nconst masterMarkdown = $('Create a master report').first().json.master_markdown || \"\";\n\nconst MAX_CHARS = 1800;\n\nfunction splitIntoSafeChunks(text, maxChars) {\n  const chunks = [];\n  let remaining = text.trim();\n  while (remaining.length > 0) {\n    if (remaining.length <= maxChars) {\n      chunks.push(remaining);\n      break;\n    }\n    let splitAt = remaining.lastIndexOf('. ', maxChars);\n    if (splitAt === -1 || splitAt < maxChars * 0.5) {\n      splitAt = maxChars;\n    } else {\n      splitAt += 1;\n    }\n    chunks.push(remaining.slice(0, splitAt).trim());\n    remaining = remaining.slice(splitAt).trim();\n  }\n  return chunks;\n}\n\nconst paragraphs = masterMarkdown.split('\\n\\n').filter(p => p.trim() !== '');\nlet safeChunks = [];\n\nfor (const p of paragraphs) {\n  safeChunks = safeChunks.concat(splitIntoSafeChunks(p, MAX_CHARS));\n}\n\nreturn safeChunks.map(chunkText => ({\n  json: {\n    page_id: pageId,\n    chunk_text: chunkText\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1216,
+        112
+      ],
+      "id": "ab6bea58-bb8f-4f7a-a737-3c8d79d91898",
+      "name": "Send chunk data to append in notion page"
+    },
+    {
+      "parameters": {
+        "resource": "block",
+        "blockId": {
+          "__rl": true,
+          "value": "={{ $json.page_id }}",
+          "mode": "id"
+        },
+        "blockUi": {
+          "blockValues": [
+            {
+              "textContent": "={{ $json.chunk_text }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        1376,
+        -16
+      ],
+      "id": "2d6a0e5e-8ec4-4715-b9b3-dab2963844e9",
+      "name": "Append project data",
+      "credentials": {
+        "notionApi": {
+          "id": "qNNrMt0J1jDlYZ0O",
+          "name": "Akansha Notion"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Projects": {
+      "main": [
+        [
+          {
+            "node": "Fetch project data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch project data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Create a master report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a master report": {
+      "main": [
+        [
+          {
+            "node": "Create report page in Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create report page in Notion": {
+      "main": [
+        [
+          {
+            "node": "Send chunk data to append in notion page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send chunk data to append in notion page": {
+      "main": [
+        [
+          {
+            "node": "Append project data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "dc6cbfc0-f3ee-45a8-b8e6-b5210eb53cb3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "00cafa1eb8a383ac595b6bbf54c5f8acd05d9d1462911bd4a0edac031509b829"
+  },
+  "id": "AEwoD1eX2WhXnnzv",
+  "tags": []
+}

@@ -88,10 +88,27 @@ def is_high_severity(state: GraphState) -> str:
     return "yes" if state.get("requires_hitl") else "no"
 
 def reject_response(state: GraphState) -> GraphState:
-    invalid = [r for r in state["risks"] if not r["valid"]]
+    all_risks = state["risks"]
+    invalid = [r for r in all_risks if not r["valid"]]
+
+    reasons = []
+    for r in invalid:
+        if not r.get("context_consistent", True):
+            reasons.append(f"\"{r['risk']}\" -- context mismatch: {r.get('context_mismatch_detail', '')}")
+        elif not r.get("citations"):
+            reasons.append(f"\"{r['risk']}\" -- no valid citation")
+        else:
+            reasons.append(f"\"{r['risk']}\" -- missing required confidence tag or impact breakdown")
+
+    message = (
+        f"{len(invalid)} of {len(all_risks)} risk(s) failed validation:\n"
+        + "\n".join(f"- {reason}" for reason in reasons)
+    )
+
     return {**state, "result": {
         "status": "rejected",
-        "message": "One or more risks were rejected for lacking a valid citation or mandatory confidence tag.",
+        "message": message,
+        "risks": all_risks,  # full list (valid + invalid) so nothing is hidden from view
         "rejected_risks": invalid,
     }}
 

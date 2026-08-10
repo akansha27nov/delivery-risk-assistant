@@ -15,6 +15,7 @@ discipline turns out to be.
 """
  
 from typing import List, Optional
+import re
 from openai import OpenAI
 from pydantic import BaseModel, Field, field_validator
 from config import OPENAI_API_KEY, LLM_MODEL
@@ -231,6 +232,59 @@ def analyse_risks(chunks: list[dict]) -> list[dict]:
     return _parse_risks_response(parsed_response)
  
  
+_ENTITY_ID_PATTERN = re.compile(r'\b([A-Z]{2,8})-\d+\b')
+
+
+def _extract_entity_prefixes(text: str) -> set:
+    """
+    Pulls ticket-style identifier prefixes (e.g. 'ATL' from 'ATL-142',
+    'ORION' from 'ORION-84') out of a chunk's text. This is a cheap,
+    deterministic signal for whether two cited chunks are actually
+    describing the same team/system -- not just coincidentally similar
+    wording. Two chunks both mentioning "QA capacity" can still be about
+    two unrelated teams; two chunks both mentioning "ATL-142" are almost
+    certainly about the same one.
+    """
+    return {m.upper() for m in _ENTITY_ID_PATTERN.findall(text or "")}
+
+
+def _check_context_consistency(valid_cites: list, evidence_map: dict):
+    """
+    Before a risk is accepted, check whether its cited chunks describe
+    the SAME project context -- not just the same Pinecone namespace.
+    A risk can pass citation validation (every citation is real,
+    traceable text) while still being misleading, if it stitches
+    together unrelated facts from different teams/systems that happen to
+    share a namespace -- e.g. a document about an unrelated team gets
+    uploaded into this project, and the model cites one real fact from
+    each as if they corroborate a single claim.
+
+    This is a deterministic heuristic scoped to what's cheaply checkable:
+    it flags a mismatch only when cited chunks contain DIFFERENT,
+    non-overlapping entity-ID prefixes (e.g. ATL-* vs ORION-*). It cannot
+    catch context mismatches in prose with no ticket-style identifiers --
+    that would need a semantic/LLM-based check, a known v2 extension, not
+    a gap this heuristic claims to close.
+
+    Returns (is_consistent: bool, detail: str).
+    """
+    prefix_groups = {}
+    for cid in valid_cites:
+        prefixes = _extract_entity_prefixes(evidence_map.get(cid, {}).get("text", ""))
+        if prefixes:
+            prefix_groups[cid] = prefixes
+
+    if len(prefix_groups) < 2:
+        return True, ""  # not enough chunks carrying identifiers to compare
+
+    common = set.intersection(*prefix_groups.values())
+    if common:
+        return True, ""
+
+    conflict_desc = "; ".join(f"{cid} mentions {sorted(p)}" for cid, p in prefix_groups.items())
+    return False, f"Citations reference unrelated entity groups with no overlap -- {conflict_desc}"
+
+
 def validate_citations(risks: list[dict], evidence) -> list[dict]:
     """
     Validates citations, impact breakdown, and computes transparent Evidence Confidence
@@ -264,7 +318,21 @@ def validate_citations(risks: list[dict], evidence) -> list[dict]:
         has_impact = r.get("impact_breakdown") is not None
         has_confidence_tag = r.get("confidence_tag") is not None
 
-        is_valid = has_valid_citation and has_impact and has_confidence_tag
+        # Context consistency: do the cited chunks actually describe the
+        # same project/system, not just live in the same namespace? A
+        # risk citing two chunks about two unrelated teams is NOT a
+        # valid corroborated finding, even if both citations individually
+        # point to real text -- this is checked before the risk is
+        # allowed to pass validation at all.
+        context_consistent, context_mismatch_detail = True, ""
+        if evidence_map and has_valid_citation:
+            context_consistent, context_mismatch_detail = _check_context_consistency(
+                valid_cites, evidence_map
+            )
+
+        is_valid = (
+            has_valid_citation and has_impact and has_confidence_tag and context_consistent
+        )
 
         # ==========================================
         # EVIDENCE CONFIDENCE HEURISTIC
@@ -297,6 +365,15 @@ def validate_citations(risks: list[dict], evidence) -> list[dict]:
         total_score = base_score + citation_score + supporting_docs_score + rerank_score_component
         evidence_confidence = int(min(max(total_score, 10), 99))
 
+        # A context mismatch means the "supporting evidence" isn't really
+        # supporting anything coherent -- cap confidence hard regardless
+        # of how good the individual citation scores looked in isolation.
+        # This is deliberately a cap, not a proportional penalty: a
+        # stitched-together claim from unrelated sources shouldn't be
+        # able to buy back confidence just by citing more of them.
+        if not context_consistent:
+            evidence_confidence = min(evidence_confidence, 20)
+
         # Human-readable retrieval quality label, based on percentile rank
         # (top third / middle third / bottom third of THIS query's pool),
         # not an absolute score comparison.
@@ -311,10 +388,13 @@ def validate_citations(risks: list[dict], evidence) -> list[dict]:
         r["valid"] = is_valid
         r["citations"] = valid_cites
         r["evidence_confidence"] = evidence_confidence
+        r["context_consistent"] = context_consistent
+        r["context_mismatch_detail"] = context_mismatch_detail
         r["confidence_breakdown"] = {
             "citation_valid": has_valid_citation,
             "num_docs": unique_docs,
-            "retrieval_quality": retrieval_quality
+            "retrieval_quality": retrieval_quality,
+            "context_consistent": context_consistent,
         }
         validated.append(r)
 

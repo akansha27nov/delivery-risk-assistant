@@ -35,7 +35,24 @@ load_dotenv()
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 pc = Pinecone(api_key=PINECONE_API_KEY)
-index = pc.Index(PINECONE_INDEX_NAME)
+
+_index = None
+
+
+def _get_index():
+    """
+    Lazily create the Pinecone Index client on first use, not at import
+    time. Creating it eagerly at module load meant simply IMPORTING this
+    module (e.g. transitively via graph.py) made a real network call to
+    Pinecone before any function was ever invoked -- a startup-latency and
+    reliability risk (a slow/unreachable Pinecone stalls app startup, not
+    just a specific retrieval), and it made this module impossible to
+    import in any offline/test context.
+    """
+    global _index
+    if _index is None:
+        _index = pc.Index(PINECONE_INDEX_NAME)
+    return _index
 
 async def query_single_angle(angle: str, query: str, namespace: str, top_k: int = DEFAULT_TOP_K):
     """Query Pinecone asynchronously for a single risk angle."""
@@ -49,7 +66,7 @@ async def query_single_angle(angle: str, query: str, namespace: str, top_k: int 
             model=EMBEDDING_MODEL
         )
         vector = response.data[0].embedding
-        return index.query(
+        return _get_index().query(
             vector=vector,
             top_k=top_k,
             namespace=namespace,

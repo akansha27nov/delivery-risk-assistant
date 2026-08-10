@@ -271,7 +271,7 @@ if st.session_state.audit_result:
                     st.markdown(f"- {rec}")
                     
             # Severity & Validation Metrics
-            c1, c2, c3 = st.columns(3)
+            c1, c2, c3, c4 = st.columns(4)
             with c1:
                 is_sev1 = r.get('is_sev1', False)
                 st.metric("SEV-1 Flag", "Active 🔴" if is_sev1 else "False 🟢")
@@ -281,7 +281,20 @@ if st.session_state.audit_result:
             with c3:
                 is_valid = r.get('valid', True)
                 st.metric("Citation Validation", "Valid ✅" if is_valid else "Invalid ❌")
-                
+            with c4:
+                is_context_consistent = r.get('context_consistent', True)
+                st.metric(
+                    "Context Consistency",
+                    "Consistent ✅" if is_context_consistent else "Mismatch ❌",
+                )
+
+            if not r.get('context_consistent', True):
+                st.error(
+                    "⚠️ **Context mismatch:** the cited chunks describe unrelated "
+                    "projects/systems and do not actually corroborate each other.\n\n"
+                    f"{r.get('context_mismatch_detail', '')}"
+                )
+
             # Citations list & Inspectable Cited Source Text
             citations = r.get('citations', [])
             if citations:

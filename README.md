@@ -102,7 +102,7 @@ TELEGRAM_CHAT_ID=your_telegram_chat_id
 ```
 
 ## Repository Layout
-
+```
 .
 ├── app/
 │   └── app.py                  # Streamlit Web UI Entrypoint
@@ -130,6 +130,8 @@ TELEGRAM_CHAT_ID=your_telegram_chat_id
 ├── stack_decision.md           # Stack selection rationale (LangGraph vs. n8n)
 ├── requirements.txt            # Python dependencies
 └── README.md                   # System documentation
+
+```
 
 ## Requirements
 

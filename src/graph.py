@@ -112,25 +112,28 @@ def reject_response(state: GraphState) -> GraphState:
         "rejected_risks": invalid,
     }}
 
+def _format_telegram_alert(project: str, risks: list[dict]) -> str:
+    lines = [
+        "🚨 HITL Escalation Required",
+        f"Project: {project.upper()}",
+        "Reason: High-severity risk or status contradiction detected.",
+        "",
+        "Extracted Risks:",
+    ]
+    for r in risks:
+        impact = r.get("impact_breakdown", {}) or {}
+        lines.append(
+            f"• {r.get('risk', 'Untitled risk')} "
+            f"(Business impact: {impact.get('business_impact', 'N/A')})"
+        )
+    return "\n".join(lines)
+
 def route_to_hitl(state: dict) -> dict:
     """Sends a Telegram alert when a high-severity risk or status contradiction is flagged."""
     project = state.get("project", "unknown")
     risks = state.get("risks", state.get("result", {}).get("risks", []))
     
-    risk_summary = "\n".join(
-        [
-            f"• {r.get('risk')} "
-            f"(Business impact: {r.get('impact_breakdown', {}).get('business_impact', 'N/A')})"
-            for r in risks
-        ]
-    )
-    
-    telegram_message = (
-        f"🚨 HITL Escalation Required\n"
-        f"Project: {project.upper()}\n"
-        f"Reason: High-severity risk or status contradiction detected.\n\n"
-        f"Extracted Risks:\n{risk_summary}"
-    )
+    telegram_message = _format_telegram_alert(project, risks)
     
     # Track the actual outcome of the Telegram API call
     ui_message = ""

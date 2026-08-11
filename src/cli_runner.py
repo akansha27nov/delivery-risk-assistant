@@ -10,7 +10,6 @@ import sys
 from datetime import datetime
 from typing import Any, Dict, List
 
-# Import your graph builder from graph.py
 from graph import build_graph
 
 DEFAULT_QUESTION = "What are this week's top delivery risks?"
@@ -48,7 +47,7 @@ def format_risk_item(risk: Dict[str, Any], overall_status: str) -> Dict[str, Any
         "is_sev1": is_sev1,
         "is_contradiction": is_contradiction,
         "valid": is_valid,
-        "confidence_score": risk.get("confidence_score"),
+        "evidence_confidence": risk.get("evidence_confidence"),
         "impact_breakdown": risk.get("impact_breakdown", {}),
         "citations": risk.get("citations", []),
         "status": item_status,

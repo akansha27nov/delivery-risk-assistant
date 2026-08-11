@@ -64,6 +64,11 @@ Hard rules:
 9. Each of your risks must represent a genuinely distinct underlying issue. Do not split one
    issue across two risk entries, and do not pad a risk's citations with chunks that don't
    directly support that specific risk's claim just because they're topically related.
+   In particular: a status-contradiction risk (rule 4) and the underlying problem it
+   contradicts are ONE risk, not two. If a status claim says "on track" while a specific
+   deadline or blocker is actually at risk, report that as a single risk that names both the
+   contradiction and the underlying deadline/blocker -- never as one risk about "the
+   contradiction" and a separate risk about "the deadline," even though they share evidence.
 10. IMPACT BREAKDOWN & CONFIDENCE TAGS: For every risk, provide a structured "impact_breakdown" 
     detailing delivery, customer, business, and team impacts. Assign a mandatory "confidence_tag"...
 11. SEVERITY METADATA FLAGS: Include is_sev1: true if the risk involves an active SEV-1 incident, 
@@ -187,6 +192,13 @@ def _call_llm(evidence_text: str) -> Optional[RiskExtractionResponse]:
         completion = client.beta.chat.completions.parse(
             model=LLM_MODEL,
             temperature=0,
+            seed=42,  # best-effort reproducibility: OpenAI's API is not perfectly
+                      # deterministic even at temperature=0 (batching/floating-point
+                      # effects across separate calls) -- a fixed seed substantially
+                      # reduces run-to-run variance in which/how-many risks get
+                      # extracted for identical input evidence. Not a hard guarantee;
+                      # see response.system_fingerprint if you need to detect when
+                      # variance is caused by an OpenAI-side model update instead.
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": f"Evidence:\n\n{evidence_text}"},

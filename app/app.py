@@ -13,6 +13,7 @@ from retrieval import gather_evidence_async
 from ingestion import build_document_from_upload
 from chunking import chunk_documents
 from embedding import add_document_to_project
+from reporting import generate_sample_report_markdown
 
 load_dotenv()
 
@@ -139,6 +140,13 @@ if run_audit:
         # Execute async graph invocation
         result = asyncio.run(app.ainvoke(state))
         st.session_state.audit_result = result
+        # Dynamically update the sample report with these live audit results
+        from reporting import generate_sample_report_markdown
+        samples_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../samples"))
+        os.makedirs(samples_dir, exist_ok=True)
+        live_md = generate_sample_report_markdown(project_choice, result)
+        with open(os.path.join(samples_dir, f"{project_choice}_risk_report.md"), "w", encoding="utf-8") as f:
+            f.write(live_md)
 
 if st.session_state.audit_result:
     result = st.session_state.audit_result

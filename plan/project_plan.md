@@ -1,8 +1,8 @@
-# AI Delivery Risk Assistant — Project Plan
+# AI Delivery Evidence Auditor — Project Plan
 
 ## 1. Use Case
 
-**Project**: AI Delivery Risk Assistant — a citation-gated evidence-auditing pipeline that surfaces delivery risks and status contradictions from project artefacts, with deterministic escalation to a human for the highest-stakes findings.
+**Project**: AI Delivery Evidence Auditor — a citation-gated evidence-auditing pipeline that surfaces delivery risks and status contradictions from project artefacts, with deterministic escalation to a human for the highest-stakes findings.
 
 **Problem statement**: Programme leaders spend hours a week manually piecing together delivery risk from sprint reports, tickets, postmortems, and status emails — and status can quietly diverge from reality between what's reported up and what's actually happening in the tracker, with no automated check catching the gap before it reaches leadership.
 

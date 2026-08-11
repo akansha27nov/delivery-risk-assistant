@@ -18,12 +18,12 @@ from reporting import generate_sample_report_markdown
 load_dotenv()
 
 st.set_page_config(
-    page_title="Delivery Risk Assistant",
+    page_title="Delivery Evidence Auditor",
     page_icon="🛡️",
     layout="wide"
 )
 
-st.title("🛡️ Delivery Risk Assistant")
+st.title("🛡️ Delivery Evidence Auditor")
 st.markdown("Automated multi-angle risk extraction, cost/impact estimation, citation gating, and deterministic HITL routing.")
 
 # ==========================================

@@ -1,149 +1,230 @@
-# AI Delivery Risk Assistant
+# Delivery Evidence Auditor
 
-An AI agent that reads real project artefacts (sprint reports, ticket exports, meeting
-transcripts) and surfaces grounded, cited delivery risks — instead of a status report someone
-has to manually assemble by hand.
+An AI evidence auditor that reads real project artefacts, retrieves the most relevant evidence, and surfaces delivery risks with citable proof instead of generic status summaries.
 
-Every risk claim the assistant makes must be traceable back to a specific source chunk. If it
-can't cite one, it doesn't get to say it. That constraint — not the RAG pipeline itself — is the
-point of this project.
+The core principle: **If a risk cannot be directly grounded in source chunks, it is not reported.**
 
-## The problem
+---
 
-Programme leaders spend hours a week reading standups, tickets, and status docs to manually piece
-together what's actually at risk. This assistant automates that synthesis, and treats
-hallucination as a defect to be caught, not an acceptable trade-off.
+## What It Does
 
-## User flow
+- Loads project documents from `knowledge_base/` and maps each file to a project namespace through `project_manifest.json`.
+- Splits text and CSV rows into citable chunks.
+- Embeds chunks into Pinecone using OpenAI embeddings.
+- Runs multi-angle retrieval, then reranks the candidate evidence with Cohere.
+- Extracts up to three risks with structured OpenAI output.
+- Validates citations and routes high-severity findings or status contradictions to human review.
+- Provides a Streamlit UI for inspection and live document uploads into an existing project namespace.
 
-```
-1. Upload Documents
-        ↓
-2. Build Knowledge Base
-        ↓
-3. Analyse Delivery Risks
-        ↓
-4. Inspect Evidence
-```
+## Pipeline
 
-## Pipeline (LangGraph)
+1. Ingest source files
+2. Chunk content into evidence units
+3. Embed and store chunks in Pinecone namespaces
+4. Retrieve evidence across multiple risk angles
+5. Rerank the retrieved pool
+6. Extract risks with the LLM
+7. Validate citations and severity
+8. Generate a report or escalate to human review
 
-```
-                 START
-                   │
-                   ▼
-          Load User Question
-                   │
-                   ▼
-          Retrieve Documents
-                   │
-                   ▼
-         Enough Evidence?
-          ┌───────────────┐
-          │               │
-         No              Yes
-          │               │
-          ▼               ▼
-   Ask for More      Analyse Risks
-   Documents               │
-                            ▼
-                  Validate Citations
-                            │
-                            ▼
-             Citation Missing?
-               ┌─────────────┐
-               │             │
-              Yes           No
-               │             │
-               ▼             ▼
-        Reject Response   Generate Report
-               │             │
-               └──────┬──────┘
-                      ▼
-                     END
-```
+---
 
-## Repo structure
+## 📄 Sample Reports
+
+The system programmatically generates executive markdown reports in the `samples/` folder:
+- **Project Atlas:** [`samples/atlas_risk_report.md`](samples/atlas_risk_report.md)
+- **Project Nova:** [`samples/nova_risk_report.md`](samples/nova_risk_report.md)
+
+---
+
+## 🚀 Future GTM Sprints
+
+See [`gtm_future_sprints.md`](gtm_future_sprints.md) for the complete Go-To-Market roadmap, including:
+- **Sprint 1 (Jira & Slack Direct Connectors):** Targeting VP of Engineering / Delivery Leads.
+- **Sprint 2 (Automated Executive Briefings & Telegram HITL Approval):** Targeting Operations & Program Managers.
+- **Sprint 3 (SOC2/Compliance Audit Trails):** Targeting Chief Information Security Officers (CISOs).
+
+---
+
+## 🧩 Architecture & Pipeline Overview
 
 ```
-delivery-risk-assistant/
-├── knowledge_base/                    # Sample project artefacts (the RAG corpus)
-│   ├── sprint_report.md            # Batch 1 — Team Atlas / Rewards Partner
-│   ├── ticket_export.csv
-│   ├── standup_transcript.txt
-│   ├── stakeholder_email.md
-│   ├── nova_sprint_report.md       # Batch 2 — Team Nova / Checkout Redesign
-│   ├── nova_incident_postmortem.md
-│   ├── nova_slack_thread.txt
-│   ├── nova_retro_notes.md
-│   └── nova_exec_status_email.md
-├── docs/
-│   └── ground_truth_risks.md   # Answer key for evaluation — NOT ingested into the pipeline
+[Inbound Artifacts] (.md, .txt, .csv)
+                │
+                ▼
+Document Ingestion & Chunking (Stable chunk_ids)
+                │
+                ▼
+Vector Embedding (OpenAI) ➔ Pinecone Namespaces
+                │
+                ▼
+Multi-Angle Retrieval ➔ Cohere Reranking
+                │
+                ▼
+Structured LLM Risk Extraction (Grounded Citations)
+                │
+                ▼
+Citation Validation & Context Verification Loop
+├── Valid ➔ Generate Markdown Report (/samples)
+└── SEV-1 / Contradiction ➔ Escalated via Telegram HITL
+```
+
+---
+
+## 🛠️ Tools & API Integrations
+
+The system integrates four external services:
+1. **OpenAI API (`gpt-4o-mini` / `text-embedding-3-small`):** Structured JSON risk extraction and vector embedding.
+2. **Pinecone Vector Database:** Multi-project namespace storage for project document chunks.
+3. **Cohere Rerank API (`rerank-v3.5`):** Reranks candidate evidence vectors for high precision.
+4. **Telegram Bot API:** Instant alert routing for Human-in-the-Loop approval when high-severity risks or contradictions occur.
+
+---
+
+## ⚙️ Environment Variables
+
+Create a `.env` file at the repository root with the following keys:
+
+```env
+# Required Services
+OPENAI_API_KEY=your_openai_api_key
+PINECONE_API_KEY=your_pinecone_api_key
+COHERE_API_KEY=your_cohere_api_key
+
+# Optional Configurations
+PINECONE_INDEX=delivery-evidence-auditor
+LLM_MODEL=gpt-4o-mini
+EMBEDDING_MODEL=text-embedding-3-small
+
+# Optional Human-In-The-Loop Alerts
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+TELEGRAM_CHAT_ID=your_telegram_chat_id
+```
+
+## Repository Layout
+
+.
+├── app/
+│   └── app.py                  # Streamlit Web UI Entrypoint
 ├── src/
-│   ├── ingestion.py           # Load + normalize source docs — DONE (Phase 2, Step 1)
-│   ├── chunking.py            # Split into citable chunks — DONE (Phase 2, Step 2)
-│   ├── embedding.py           # OpenAI embeddings -> Pinecone — DONE (Phase 2, Step 3; run locally, needs your API keys)
-│   ├── retrieval.py           # Query Pinecone (Phase 3)
-│   ├── rerank.py             # Cohere Rerank (Phase 3)
-│   ├── agent.py              # LangGraph nodes: analyse risks, validate citations (Phase 4)
-│   ├── graph.py              # Wires the LangGraph state machine together (Phase 4)
-│   └── app.py                # UI — 4-step flow (Phase 5)
-├── tests/
-│   └── test_grounding.py     # Checks output against docs/ground_truth_risks.md (Phase 4)
-├── requirements.txt
-└── .env.example
-```
+│   ├── agent.py                # LLM risk extraction & citation validation logic
+│   ├── api.py                  # FastAPI wrapper for triggering audits
+│   ├── chunking.py             # Converts documents into citable evidence units with stable `chunk_id` values.
+│   ├── cli_runner.py           # Command-line audit runner
+│   ├── embedding.py            # Pinecone index management
+│   ├── graph.py                # LangGraph state machine definition
+│   ├── ingestion.py            # Document loader (.md, .txt, .csv) sources from `knowledge_base/`
+│   ├── reporting.py            # Programmatic Markdown report builder
+│   └── retrieval.py            # Multi-angle retrieval & Cohere reranking
+├── tests/                      # contains unit tests plus grounded integration checks.
+├── samples/                    # System-generated audit reports
+│   ├── atlas_risk_report.md
+│   └── nova_risk_report.md
+├── knowledge_base/             # Demo project artifact files
+├── docs/                       # Internal documentation & ground truth files
+├── scripts/                    # Individual test scripts for some code
+├── workflow/                   # n8n workflow `.json`
+├── screenshots/                # n8n workflow screenshot
+├── plan/                       # contains project plan and elevator pitch
+├── gtm_future_sprints.md       # Go-To-Market expansion strategy
+├── stack_decision.md           # Stack selection rationale (LangGraph vs. n8n)
+├── requirements.txt            # Python dependencies
+└── README.md                   # System documentation
 
-## Sample corpus
+## Requirements
 
-The `knowledge_base/` folder contains two synthetic project narratives, all fabricated, with risks
-intentionally planted so output can be checked against a known answer key.
+The project uses the packages listed in `requirements.txt`, including:
 
-**Batch 1 — Team Atlas / Rewards Partner launch** (sprint report, ticket export, standup
-transcript, stakeholder email):
-1. A critical-path ticket blocked 9 days on an external dependency
-2. Uncontrolled mid-sprint scope addition
-3. An attrition/retention signal from a single team member (single-source — tests that the
-   assistant doesn't fabricate corroboration, and handles people-sensitive content responsibly)
-4. Declining sprint velocity + a QA capacity gap
+- LangChain and LangGraph
+- OpenAI
+- Pinecone
+- Cohere
+- Streamlit
+- FastAPI and pytest
 
-**Batch 2 — Team Nova / Checkout Redesign** (sprint report, incident postmortem, noisy Slack
-export, retro notes, exec status email) — deliberately harder:
-5. An unassigned, undated remediation ticket for a SEV-1 incident that threatens the launch
-6. A hard external API deprecation deadline landing before launch, buried in off-topic Slack chat
-   (tests retrieval/rerank robustness against noise)
-7. A negative control: an explicitly *resolved* issue (CI flakiness) that should never be
-   reported as a current risk (tests recency handling, not just retrieval)
-8. A status-misrepresentation risk that only shows up as a *contradiction* between the exec status
-   email and other sources — the single hardest case in the corpus, and the one closest to the
-   actual "someone has to manually piece it together" problem from the pitch
+## Environment Variables
 
-See `docs/ground_truth_risks.md` for the full answer key and why each risk is a useful test case.
+Create a `.env` file at the repository root with at least:
 
-## Build status
+- `OPENAI_API_KEY`
+- `PINECONE_API_KEY`
+- `COHERE_API_KEY`
 
-- [x] **Phase 1** — Repo scaffold + sample documents
-- [x] **Phase 2** — Ingestion, chunking, embedding
-- [ ] **Phase 3** — Retrieval + rerank
-- [ ] **Phase 4** — LangGraph agent reasoning + citation validation
-- [ ] **Phase 5** — UI + packaging (4-step flow, README demo, walkthrough video)
+Optional variables:
+
+- `PINECONE_INDEX` defaulting to `delivery-risk-assistant`
+- `LLM_MODEL` defaulting to `gpt-4o-mini`
+- `EMBEDDING_MODEL` defaulting to `text-embedding-3-small`
+- `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` for human-in-the-loop alerts
 
 ## Setup
 
 ```bash
-python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # add your OpenAI, Pinecone, and Cohere API keys
 ```
 
-## Verify Phase 2 locally
+## Run The Project
+
+### Streamlit UI (Primary MVP Entrypoint)
+
+```bash
+streamlit run app/app.py
+```
+
+The UI lets you choose a project namespace, inspect retrieved evidence, run the full audit, and upload a new document into the selected project namespace.
+
+- Select a project namespace (atlas or nova).
+- Inspect raw reranked evidence vectors.
+- Trigger full audit pipeline and view KPI dashboard.
+- Reports automatically update in `samples/`.
+
+### CLI Audit
 
 ```bash
 cd src
-python ingestion.py     # confirms all 9 files load correctly
-python chunking.py      # confirms 38 chunks are produced with clean citations
-python embedding.py     # embeds via OpenAI, upserts into Pinecone, runs a
-                         # sanity-check query (needs OPENAI_API_KEY +
-                         # PINECONE_API_KEY — the one step that can't be
-                         # tested without real API access)
+python cli_runner.py --project atlas --pretty
 ```
+
+Replace `atlas` with `nova` to run the other demo corpus. The CLI prints a JSON payload plus a pre-rendered markdown briefing.
+
+### Rebuild The Demo Corpus (Knowledge Base Vector Index)
+
+```bash
+cd src
+python ingestion.py
+python chunking.py
+python embedding.py
+```
+
+The embedding step needs live API access and will create or refresh the Pinecone index if needed.
+
+## Testing
+
+Run the fast unit tests from the repository root:
+
+```bash
+pytest tests/test_unit_*.py tests/test_agent.py
+```
+
+Run the live grounded integration checks from `src/` when the API keys and network access are available:
+
+```bash
+cd src
+pytest ../tests/test_grounding.py -v
+```
+
+If you want to run the full suite, include the grounding test only when the external services are configured.
+
+## Data Notes
+
+- `knowledge_base/` contains the synthetic demo corpus for two projects: `atlas` and `nova`.
+- `project_manifest.json` is the source of truth for which files belong to each project.
+- The corpora are intentionally small and structured to exercise blockers, scope creep, resolved issues, and status contradictions.
+- `docs/ground_truth_risks.md` exists for evaluation only.
+
+## Output Behavior & Guardrails
+
+- **Strict Grounding:** Every reported risk must include valid chunk_id references from retrieved evidence.
+- **False Positive Elimination:** Resolved or historical issues are filtered out from current risk metrics.
+- **HITL Routing:** High-severity risks (SEV-1) or status contradictions trigger human approval workflows.
+- The **Streamlit app** includes a live upload flow that adds a new file into an existing project namespace without clearing the rest of the index.

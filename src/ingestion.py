@@ -17,12 +17,14 @@ import csv
 import io
 import json
 from pathlib import Path
+from logger import get_logger
 
 DATA_DIR = Path(__file__).parent.parent / "knowledge_base"
 MANIFEST_PATH = Path(__file__).parent.parent / "project_manifest.json"
 
 TEXT_EXTENSIONS = {".md", ".txt"}
 CSV_EXTENSIONS = {".csv"}
+logger = get_logger(__name__)
 
 
 def _load_manifest(manifest_path: Path = MANIFEST_PATH) -> dict:
@@ -94,10 +96,10 @@ def build_document_from_upload(filename: str, raw_content: str, project: str) ->
 
 if __name__ == "__main__":
     docs = load_documents()
-    print(f"Loaded {len(docs)} source documents:\n")
+    logger.info("Loaded %d source document(s).", len(docs))
     for d in docs:
         tag = f"[{d['project']}]"
         if d["type"] == "text":
-            print(f"  {tag:<8} {d['source']:<30} text   {len(d['content']):>5} chars")
+            logger.info("%s %s text %5d chars", f"{tag:<8}", f"{d['source']:<30}", len(d["content"]))
         else:
-            print(f"  {tag:<8} {d['source']:<30} csv    {len(d['rows']):>5} rows")
+            logger.info("%s %s csv  %5d rows", f"{tag:<8}", f"{d['source']:<30}", len(d["rows"]))

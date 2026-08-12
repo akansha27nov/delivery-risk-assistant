@@ -12,8 +12,10 @@ Two strategies:
   - Text/Markdown is split by paragraph, grouped up to max_chars, tracking
     the current "##" heading so the location string names the section.
 """
+from logger import get_logger
 
 MAX_CHARS = 600
+logger = get_logger(__name__)
 
 
 def _chunk_text_doc(source: str, content: str, project: str, max_chars: int = MAX_CHARS) -> list[dict]:
@@ -89,15 +91,15 @@ if __name__ == "__main__":   # pragma: no cover
     docs = load_documents()
     chunks = chunk_documents(docs)
 
-    print(f"{len(docs)} documents -> {len(chunks)} chunks\n")
+    logger.info("%d document(s) -> %d chunk(s).", len(docs), len(chunks))
 
     from collections import Counter
     by_project = Counter(c["project"] for c in chunks)
     for project, n in by_project.items():
-        print(f"  [{project}] {n} chunks")
+        logger.info("[%s] %d chunk(s)", project, n)
 
-    print("\n--- Sample chunk, confirming project tag flowed through ---")
+    logger.info("Sample chunk, confirming project tag flowed through")
     sample = next(c for c in chunks if c["source"] == "ticket_export.csv" and "ATL-142" in c["chunk_id"])
-    print(f"chunk_id: {sample['chunk_id']}")
-    print(f"project:  {sample['project']}")
-    print(f"location: {sample['location']}")
+    logger.info("chunk_id: %s", sample["chunk_id"])
+    logger.info("project: %s", sample["project"])
+    logger.info("location: %s", sample["location"])

@@ -14,12 +14,14 @@ from config import (
     EMBEDDING_DIM
 )
 from rerank import rerank 
+from logger import get_logger
 
 load_dotenv()
 
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 pc = Pinecone(api_key=PINECONE_API_KEY)
 INDEX_NAME = PINECONE_INDEX_NAME  # the plain string name -- pc.Index(...) is created on demand below, not stored here
+logger = get_logger(__name__)
 
 
 def _embed(texts: list[str]) -> list[list[float]]:
@@ -30,6 +32,7 @@ def _embed(texts: list[str]) -> list[list[float]]:
 def _ensure_index():
     existing = [idx["name"] for idx in pc.list_indexes()]
     if INDEX_NAME not in existing:
+        logger.info("Creating Pinecone index '%s'.", INDEX_NAME)
         pc.create_index(
             name=INDEX_NAME,
             dimension=EMBEDDING_DIM,
@@ -95,6 +98,7 @@ def build_vector_store(chunks: list[dict], batch_size: int = 50):
     projects = sorted(set(c["project"] for c in chunks))
 
     for project in projects:
+        logger.info("Rebuilding Pinecone namespace '%s' with %d chunk(s).", project, sum(1 for c in chunks if c["project"] == project))
         project_chunks = [c for c in chunks if c["project"] == project]
 
         try:
@@ -120,6 +124,7 @@ def add_document_to_project(chunks: list[dict], project: str, batch_size: int = 
     instead of rebuilding the whole demo corpus from knowledge_base/.
     """
     index = _ensure_index()
+    logger.info("Adding %d new chunk(s) to Pinecone namespace '%s'.", len(chunks), project)
     _upsert_chunks(index, chunks, project, batch_size)
     return index
 
@@ -138,16 +143,16 @@ if __name__ == "__main__":    # pragma: no cover
     index = build_vector_store(chunks)
 
     stats = index.describe_index_stats()
-    print(f"Pinecone index '{INDEX_NAME}' — vectors per namespace:")
+    logger.info("Pinecone index '%s' — vectors per namespace:", INDEX_NAME)
     for namespace, ns_stats in stats["namespaces"].items():
-        print(f"  [{namespace}] {ns_stats['vector_count']} chunks")
+        logger.info("[%s] %d chunk(s)", namespace, ns_stats["vector_count"])
 
     # Sanity check, run separately per project to prove isolation
     query = "Is anything blocking the launch?"
     query_vec = _embed([query])[0]
     for project in stats["namespaces"]:
-        print(f"\nSanity check — '{query}' (namespace: {project}):")
+        logger.info("Sanity check — '%s' (namespace: %s):", query, project)
         result = index.query(vector=query_vec, top_k=3, include_metadata=True, namespace=project)
         for match in result["matches"]:
             meta = match["metadata"]
-            print(f"  [{meta['location']}] score={match['score']:.3f} {meta['text'][:100]}...")
+            logger.info("[%s] score=%.3f %s...", meta["location"], match["score"], meta["text"][:100])

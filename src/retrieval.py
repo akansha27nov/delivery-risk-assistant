@@ -30,11 +30,13 @@ from config import (
     FINAL_TOP_N     
 )
 from rerank import rerank 
+from logger import get_logger
 
 load_dotenv()
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 pc = Pinecone(api_key=PINECONE_API_KEY)
+logger = get_logger(__name__)
 
 _index = None
 
@@ -61,6 +63,7 @@ async def query_single_angle(angle: str, query: str, namespace: str, top_k: int 
     loop = asyncio.get_running_loop()
     
     def _pinecone_call():
+        logger.debug("Retrieving angle '%s' for namespace '%s'.", angle, namespace)
         response = client.embeddings.create(
             input=f"{query} regarding {angle}",
             model=EMBEDDING_MODEL
@@ -83,11 +86,13 @@ async def query_single_angle(angle: str, query: str, namespace: str, top_k: int 
             "location": meta.get("location"),
             "score": match.get("score")
         })
+    logger.debug("Angle '%s' returned %d chunk(s).", angle, len(chunks))
     return chunks
 
 async def gather_evidence_async(project: str, query: str) -> list:
     """Gathers evidence across all risk angles concurrently using asyncio."""
     namespace = project.lower()
+    logger.info("Gathering evidence for project '%s' across %d angle(s).", namespace, len(RISK_ANGLES))
     
     tasks = [query_single_angle(angle, query, namespace) for angle in RISK_ANGLES]
     results = await asyncio.gather(*tasks)
@@ -102,5 +107,6 @@ async def gather_evidence_async(project: str, query: str) -> list:
                 
     # FIX: Use the imported FINAL_TOP_N (8) for the validated pipeline threshold
     reranked_chunks = rerank(query, unique_chunks, top_n=FINAL_TOP_N)
+    logger.info("Gathered %d unique chunk(s); reranked to %d chunk(s).", len(unique_chunks), len(reranked_chunks))
                 
     return reranked_chunks

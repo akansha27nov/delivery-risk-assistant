@@ -2,6 +2,9 @@ import streamlit as st
 from ingestion import build_document_from_upload
 from chunking import chunk_documents
 from embedding import add_document_to_project
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 def reset_audit_state():
     st.session_state.retrieved_evidence = []
@@ -34,12 +37,14 @@ def render_sidebar():
                     raw_text = uploaded_file.getvalue().decode("utf-8")
                     doc = build_document_from_upload(uploaded_file.name, raw_text, project_choice)
                     add_document_to_project(chunk_documents([doc]), project_choice)
+                    logger.info("Uploaded document '%s' added to project '%s'.", uploaded_file.name, project_choice)
                     
                     st.session_state.upload_status = {"ok": True, "message": f"Added '{uploaded_file.name}'."}
                     # Clear previous audit runs on new upload 
                     st.session_state.retrieved_evidence = []
                     st.session_state.audit_result = None
                 except Exception as e:
+                    logger.exception("Upload failed for project '%s' and file '%s': %s", project_choice, getattr(uploaded_file, "name", "unknown"), e)
                     st.session_state.upload_status = {"ok": False, "message": f"Failed: {e}"}
 
         if st.session_state.upload_status:

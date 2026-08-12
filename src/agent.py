@@ -20,9 +20,11 @@ from openai import OpenAI
 from pydantic import BaseModel, Field, field_validator
 from config import OPENAI_API_KEY, LLM_MODEL
 from prompts import SYSTEM_PROMPT
+from logger import get_logger
 
 VALID_CONFIDENCE_TAGS = {"estimated_from_source_data", "directional_estimate"}
 client = OpenAI(api_key=OPENAI_API_KEY)
+logger = get_logger(__name__)
 
 _ENTITY_ID_PATTERN = re.compile(r'\b([A-Z]{2,8})-\d+\b')
 _TICKET_ID_PATTERN = re.compile(r'\b[A-Z]{2,8}-\d+\b')
@@ -86,6 +88,7 @@ def _format_evidence(chunks: list[dict]) -> str:
 def _call_llm(evidence_text: str) -> Optional[RiskExtractionResponse]:
     """Calls OpenAI using structured outputs with Pydantic schema enforcement."""
     try:
+        logger.debug("Calling OpenAI structured extraction with %d characters of evidence.", len(evidence_text))
         completion = client.beta.chat.completions.parse(
             model=LLM_MODEL,
             temperature=0,
@@ -104,7 +107,7 @@ def _call_llm(evidence_text: str) -> Optional[RiskExtractionResponse]:
         )
         return completion.choices[0].message.parsed
     except Exception as e:
-        print(f"OpenAI structured parsing error: {e}")
+        logger.exception("OpenAI structured parsing error: %s", e)
         return None
  
  
@@ -135,10 +138,13 @@ def analyse_risks(chunks: list[dict]) -> list[dict]:
     validated via Pydantic structured outputs.
     """
     if not chunks:
+        logger.info("No evidence chunks supplied for risk analysis.")
         return []
     evidence_text = _format_evidence(chunks)
+    logger.info("Analysing %d evidence chunk(s) for delivery risks.", len(chunks))
     parsed_response = _call_llm(evidence_text)
     risks = _parse_risks_response(parsed_response)
+    logger.info("Extracted %d risk(s) before deduplication.", len(risks))
     return _dedupe_same_ticket_risks(risks)
  
 def _extract_entity_prefixes(text: str) -> set:

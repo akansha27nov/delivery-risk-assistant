@@ -10,6 +10,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../src"
 from graph import build_graph
 from retrieval import gather_evidence_async
 from reporting import generate_sample_report_markdown
+from logger import get_logger
 
 # Import our new UI modules
 from theme import apply_custom_theme
@@ -17,6 +18,7 @@ from cards import render_executive_summary, render_risk_breakdown
 from sidebar import render_sidebar
 
 load_dotenv()
+logger = get_logger(__name__)
 
 st.set_page_config(page_title="Delivery Evidence Auditor", layout="wide")
 apply_custom_theme()
@@ -54,6 +56,7 @@ if run_inspection or run_audit:
         try:
             st.session_state.retrieved_evidence = cached_gather_evidence(project_choice, user_question)
         except Exception as e:
+            logger.exception("Evidence retrieval failed for project '%s': %s", project_choice, e)
             st.error(f"⚠️ Evidence retrieval hiccup: {e}")
             st.info("💡 Tip: Check your API keys or network connection.")
             st.session_state.retrieved_evidence = []
@@ -84,6 +87,7 @@ if run_audit:
                 f.write(generate_sample_report_markdown(project_choice, st.session_state.audit_result))
                 
         except Exception as e:
+            logger.exception("Pipeline execution failed for project '%s': %s", project_choice, e)
             st.error(f"⚠️ Pipeline execution error: {e}")
             st.info("💡 Tip: Verify your OpenAI and Pinecone API keys in the .env file.")
 

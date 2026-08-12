@@ -11,8 +11,10 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 from graph import build_graph
+from logger import get_logger
 
 DEFAULT_QUESTION = "What are this week's top delivery risks?"
+logger = get_logger(__name__)
 
 
 def format_risk_item(risk: Dict[str, Any], overall_status: str) -> Dict[str, Any]:
@@ -176,9 +178,11 @@ def main():
     args = parser.parse_args()
 
     try:
+        logger.info("Running audit for project '%s'.", args.project)
         results = asyncio.run(run_pipeline(project=args.project, question=args.question))
         indent = 2 if args.pretty else None
         print(json.dumps(results, indent=indent, default=str))
+        logger.info("Audit completed for project '%s' with status '%s'.", args.project, results["status"])
 
         if results["status"] in ["rejected", "insufficient_evidence"]:
             sys.exit(2)
@@ -186,6 +190,7 @@ def main():
         sys.exit(0)
 
     except Exception as e:
+        logger.exception("Audit failed for project '%s': %s", args.project, e)
         error_payload = {
             "status": "error",
             "project": args.project,

@@ -8,12 +8,14 @@ import os
 
 import cohere
 from dotenv import load_dotenv
+from logger import get_logger
 
 load_dotenv()
 
 RERANK_MODEL = "rerank-v3.5"
 
 co = cohere.Client(os.environ["COHERE_API_KEY"])
+logger = get_logger(__name__)
 
 
 def rerank(query: str, chunks: list[dict], top_n: int = 5) -> list[dict]:
@@ -58,11 +60,11 @@ if __name__ == "__main__":      # pragma: no cover
             candidates = await query_single_angle("blockers", query, namespace=project, top_k=8)
             top = rerank(query, candidates, top_n=5)
 
-            print(f"=== Project: {project} ===")
-            print(f"Reranked top {len(top)} of {len(candidates)} candidates for: '{query}'\n")
+            logger.info("=== Project: %s ===", project)
+            logger.info("Reranked top %d of %d candidates for: '%s'", len(top), len(candidates), query)
             for c in top:
-                print(f"  [{c['location']}] rerank_score={c['rerank_score']:.3f}")
-                print(f"    {c['text'][:100]}...\n")
+                logger.info("[%s] rerank_score=%.3f", c["location"], c["rerank_score"])
+                logger.info("%s...", c["text"][:100])
 
     # Execute the async test loop
     asyncio.run(test_reranking_standalone())

@@ -20,6 +20,9 @@ from config import (
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID
 )
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 class GraphState(TypedDict, total=False):
     project: str
@@ -35,7 +38,9 @@ def load_user_question(state: GraphState) -> GraphState:
 
 # Changed to async def to await concurrent multi-angle retrieval
 async def retrieve_documents(state: GraphState) -> GraphState:
+    logger.info("Retrieving evidence for project '%s'.", state["project"])
     evidence = await gather_evidence_async(state["project"], state["question"])
+    logger.info("Retrieved %d evidence chunk(s) for project '%s'.", len(evidence), state["project"])
     return {**state, "evidence": evidence}
 
 def has_enough_evidence(state: GraphState) -> str:
@@ -52,6 +57,7 @@ def ask_for_more_documents(state: GraphState) -> GraphState:
     }}
 
 def analyse_risks_node(state: GraphState) -> GraphState:
+    logger.info("Analysing retrieved evidence for project '%s'.", state["project"])
     risks = analyse_risks(state["evidence"])
     return {**state, "risks": risks}
 
@@ -62,6 +68,7 @@ def validate_citations_node(state: GraphState) -> GraphState:
     # to a hardcoded default.
     validated = validate_citations(state["risks"], state["evidence"])
     citation_missing = any(not r["valid"] for r in validated)
+    logger.info("Citation validation completed for %d risk(s). Invalid: %d.", len(validated), sum(1 for r in validated if not r["valid"]))
     return {**state, "risks": validated, "citation_missing": citation_missing}
 
 
@@ -104,6 +111,7 @@ def reject_response(state: GraphState) -> GraphState:
         f"{len(invalid)} of {len(all_risks)} risk(s) failed validation:\n"
         + "\n".join(f"- {reason}" for reason in reasons)
     )
+    logger.warning("Rejecting response for project '%s': %s", state.get("project", "unknown"), message)
 
     return {**state, "result": {
         "status": "rejected",
@@ -147,13 +155,13 @@ def route_to_hitl(state: dict) -> dict:
         try:
             response = requests.post(url, json=payload)
             response.raise_for_status()
-            print("Telegram HITL alert sent successfully!")
+            logger.info("Telegram HITL alert sent successfully for project '%s'.", project)
             ui_message = "High-severity risk or status contradiction detected. Escalated to Telegram for human review."
         except Exception as e:
-            print(f"Error sending Telegram notification: {e}")
+            logger.exception("Error sending Telegram notification for project '%s': %s", project, e)
             ui_message = "High-severity risk detected, but Telegram delivery failed (Network/API Error). Check console for details."
     else:
-        print("Telegram credentials missing. Skipping notification delivery.")
+        logger.warning("Telegram credentials missing. Skipping notification delivery.")
         ui_message = "High-severity risk detected, but Telegram credentials are missing in the environment. Alert not sent."
         
     state["requires_hitl"] = True
@@ -165,6 +173,7 @@ def route_to_hitl(state: dict) -> dict:
     return state
 
 def generate_report(state: GraphState) -> GraphState:
+    logger.info("Generated final report for project '%s' with %d risk(s).", state["project"], len(state.get("risks", [])))
     return {**state, "result": {
         "status": "ok",
         "project": state["project"],
@@ -232,14 +241,13 @@ def export_workflow_diagrams(png_output_path: str = "docs/workflow_diagram.png")
             background_color="white",
             padding=15
         )
-        print(f"Successfully generated workflow diagram PNG at: {png_output_path}")
+        logger.info("Successfully generated workflow diagram PNG at: %s", png_output_path)
     except Exception as e:
-        print(f"PNG generation skipped or failed (network/API required for mermaid.ink): {e}")
+        logger.exception("PNG generation skipped or failed (network/API required for mermaid.ink): %s", e)
         
     return mermaid_syntax
 
 if __name__ == "__main__":     # pragma: no cover
-    print("=== Programmatically Exporting LangGraph Workflow ===")
+    logger.info("Programmatically exporting LangGraph workflow.")
     code = export_workflow_diagrams()
-    print("\nGenerated Mermaid Code:")
-    print(code)
+    logger.debug("Generated Mermaid code:\n%s", code)

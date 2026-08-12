@@ -50,15 +50,6 @@ Hard rules:
    deadline or blocker is actually at risk, report that as a single risk that names both the
    contradiction and the underlying deadline/blocker -- never as one risk about "the
    contradiction" and a separate risk about "the deadline," even though they share evidence.
-10. IMPACT BREAKDOWN & CONFIDENCE TAGS: For every risk, provide a structured "impact_breakdown"
-    detailing delivery, customer, business, and team impacts. Assign a mandatory "confidence_tag":
-    "estimated_from_source_data" if a specific figure/metric exists in the cited evidence,
-    otherwise "directional_estimate".
-11. SEVERITY METADATA FLAGS: Include is_sev1: true if the risk involves an active SEV-1 incident,
-    P0 bug, or an open/unassigned postmortem remediation ticket from a SEV-1 outage; otherwise false.
-12. RECOMMENDATIONS RULE: For every identified risk, you must provide exactly 2-3 actionable
-    recommendations in a list format. These MUST be strictly derived from the provided evidence.
-    Do not hallucinate external solutions.
 """
 
 WORKED_EXAMPLES = """Worked example of rule 4 (contradiction detection):

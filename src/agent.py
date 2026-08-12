@@ -24,6 +24,9 @@ from prompts import SYSTEM_PROMPT
 VALID_CONFIDENCE_TAGS = {"estimated_from_source_data", "directional_estimate"}
 client = OpenAI(api_key=OPENAI_API_KEY)
 
+_ENTITY_ID_PATTERN = re.compile(r'\b([A-Z]{2,8})-\d+\b')
+_TICKET_ID_PATTERN = re.compile(r'\b[A-Z]{2,8}-\d+\b')
+
 # ==========================================
 # 🛡️ Pydantic Schemas for Structured Output
 # ==========================================
@@ -39,8 +42,23 @@ class RiskItem(BaseModel):
     explanation: str = Field(description="Detailed explanation of why this is a risk based on evidence.")
     citations: List[str] = Field(description="List of exact chunk IDs supporting this claim.")
     impact_breakdown: ImpactBreakdown = Field(description="Structured breakdown of the risk's impact.")
-    confidence_tag: Optional[str] = Field(default=None, description="Must be 'estimated_from_source_data' or 'directional_estimate'.")
-    is_sev1: bool = Field(default=False, description="True if explicitly tagged SEV-1 or critical financial/customer impact.")
+    confidence_tag: Optional[str] = Field(
+        default=None,
+        description=(
+            "Set to 'estimated_from_source_data' ONLY if a specific figure, ticket "
+            "count, or exact metric exists in the cited evidence chunks. Otherwise "
+            "set to 'directional_estimate'. No other values are valid."
+        ),
+    )
+    is_sev1: bool = Field(
+        default=False,
+        description=(
+            "True if the risk involves an active SEV-1 incident, a P0 bug, or an "
+            "open/unassigned postmortem remediation ticket from a SEV-1 outage. "
+            "False otherwise -- do not set true just because the risk has high "
+            "financial or customer impact in a general sense."
+        ),
+    )
     is_contradiction: bool = Field(default=False, description="True if an official status report contradicts underlying tickets/Slack threads.")
     recommendations: list[str] = Field(
         description="2-3 actionable recommendations to mitigate the risk, based ONLY on the retrieved evidence."
@@ -120,12 +138,9 @@ def analyse_risks(chunks: list[dict]) -> list[dict]:
         return []
     evidence_text = _format_evidence(chunks)
     parsed_response = _call_llm(evidence_text)
-    return _parse_risks_response(parsed_response)
+    risks = _parse_risks_response(parsed_response)
+    return _dedupe_same_ticket_risks(risks)
  
- 
-_ENTITY_ID_PATTERN = re.compile(r'\b([A-Z]{2,8})-\d+\b')
-
-
 def _extract_entity_prefixes(text: str) -> set:
     """
     Pulls ticket-style identifier prefixes (e.g. 'ATL' from 'ATL-142',
@@ -138,6 +153,41 @@ def _extract_entity_prefixes(text: str) -> set:
     """
     return {m.upper() for m in _ENTITY_ID_PATTERN.findall(text or "")}
 
+
+def _find_duplicate_risk_indices(risks: list[dict]) -> set:
+    """
+    Deterministic backstop for the specific pattern Rule 9 targets: the
+    same underlying ticket/issue reported as two separate risks (e.g. a
+    contradiction risk and "the underlying problem it contradicts" as a
+    separate entry). Prompt instructions alone don't reliably prevent
+    this every run -- this is a code-level check instead of more prompt
+    text, since it's more reliable and costs zero tokens.
+
+    Flags two risks as duplicates only if they (a) reference the same
+    specific ticket ID in their own text, AND (b) share at least one
+    citation. Both conditions together avoids false positives -- two
+    genuinely distinct risks can share a citation (e.g. both reference
+    the same sprint report) without being duplicates.
+    """
+    to_drop = set()
+    for i in range(len(risks)):
+        if i in to_drop:
+            continue
+        ids_i = set(_TICKET_ID_PATTERN.findall(risks[i].get("explanation", "") + " " + risks[i].get("risk", "")))
+        cites_i = set(risks[i].get("citations", []))
+        for j in range(i + 1, len(risks)):
+            if j in to_drop:
+                continue
+            ids_j = set(_TICKET_ID_PATTERN.findall(risks[j].get("explanation", "") + " " + risks[j].get("risk", "")))
+            cites_j = set(risks[j].get("citations", []))
+            if ids_i and ids_j and (ids_i & ids_j) and (cites_i & cites_j):
+                to_drop.add(j if len(cites_i) >= len(cites_j) else i)
+    return to_drop
+
+
+def _dedupe_same_ticket_risks(risks: list[dict]) -> list[dict]:
+    drop = _find_duplicate_risk_indices(risks)
+    return [r for i, r in enumerate(risks) if i not in drop]
 
 def _check_context_consistency(valid_cites: list, evidence_map: dict):
     """

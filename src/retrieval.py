@@ -27,7 +27,7 @@ from config import (
     EMBEDDING_MODEL,
     RISK_ANGLES,
     DEFAULT_TOP_K,
-    FINAL_TOP_N       # <--- Import the new constant
+    FINAL_TOP_N     
 )
 from rerank import rerank 
 

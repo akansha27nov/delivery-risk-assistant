@@ -3,9 +3,19 @@ from ingestion import build_document_from_upload
 from chunking import chunk_documents
 from embedding import add_document_to_project
 
+def reset_audit_state():
+    st.session_state.retrieved_evidence = []
+    st.session_state.audit_result = None
+
 def render_sidebar():
     st.sidebar.header("1. Audit Configuration")
-    project_choice = st.sidebar.selectbox("Select Project Scope", options=["atlas", "nova"], index=0)
+    
+    project_choice = st.sidebar.selectbox(
+        "Select Project Scope", 
+        options=["atlas", "nova"], 
+        index=0,
+        on_change=reset_audit_state
+    )
 
     if "upload_status" not in st.session_state:
         st.session_state.upload_status = None
@@ -26,26 +36,27 @@ def render_sidebar():
                     add_document_to_project(chunk_documents([doc]), project_choice)
                     
                     st.session_state.upload_status = {"ok": True, "message": f"Added '{uploaded_file.name}'."}
-                    
-                    # Clear previous audit runs on new upload
+                    # Clear previous audit runs on new upload 
                     st.session_state.retrieved_evidence = []
                     st.session_state.audit_result = None
                 except Exception as e:
                     st.session_state.upload_status = {"ok": False, "message": f"Failed: {e}"}
 
-        # Show success/error messages within the sidebar expander
         if st.session_state.upload_status:
             if st.session_state.upload_status["ok"]:
                 st.success(st.session_state.upload_status["message"])
             else:
                 st.error(st.session_state.upload_status["message"])
 
-    user_question = st.sidebar.text_input("Audit Query", value="What are this week's top delivery risks and blockers?")
+    user_question = st.sidebar.text_input(
+        "Audit Query", 
+        value="What are this week's top delivery risks and blockers?",
+        on_change=reset_audit_state
+    )
 
     st.sidebar.markdown("---")
     st.sidebar.header("2. Execution Workflow")
     run_inspection = st.sidebar.button("Step A: Inspect Retrieved Evidence")
     run_audit = st.sidebar.button("Step B: Run Full Risk Audit", type="primary")
 
-    # Return these values so app.py knows what the user selected/clicked
     return project_choice, user_question, run_inspection, run_audit

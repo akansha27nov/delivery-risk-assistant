@@ -105,7 +105,10 @@ TELEGRAM_CHAT_ID=your_telegram_chat_id
 ```
 .
 ├── app/
-│   └── app.py                  # Streamlit Web UI Entrypoint
+│   |── ui.py                  # Streamlit Web UI Entrypoint
+│   ├── cards.py                
+│   ├── sidebar.py 
+│   └── theme.py 
 ├── src/
 │   ├── agent.py                # LLM risk extraction & citation validation logic
 │   ├── api.py                  # FastAPI wrapper for triggering audits

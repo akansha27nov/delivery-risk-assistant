@@ -26,12 +26,12 @@ st.markdown("Automated multi-angle evidence extraction, cost/impact estimation, 
 
 # --- Caching Decorators for Demo Speed & Cost Saving ---
 
-@st.cache_resource
+@st.cache_resource(show_spinner=False)
 def get_cached_graph():
     """Caches the compiled LangGraph workflow object in memory."""
     return build_graph()
 
-@st.cache_data(ttl=600)
+@st.cache_data(show_spinner=False)
 def cached_gather_evidence(project_choice: str, user_question: str):
     """Caches retrieval and reranking results for 10 minutes."""
     return asyncio.run(gather_evidence_async(project_choice, user_question))

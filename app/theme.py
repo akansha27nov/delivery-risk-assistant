@@ -125,6 +125,19 @@ def apply_custom_theme():
         letter-spacing: 0.05em !important;
         color: #000000 !important;
     }
+    /* --- Equal-Height Flex Columns for Impact Cards --- */
+    [data-testid="column"] {
+        display: flex;
+        flex-direction: column;
+    }
+    [data-testid="column"] > div {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+    [data-testid="column"] > div > div {
+        flex: 1;
+    }
 
     /* 8. Expanders (Forensic Evidence Inspector) */
     [data-testid="stExpander"] {

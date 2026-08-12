@@ -173,7 +173,7 @@ pip install -r requirements.txt
 ### Streamlit UI (Primary MVP Entrypoint)
 
 ```bash
-streamlit run app/app.py
+streamlit run app/ui.py
 ```
 
 The UI lets you choose a project namespace, inspect retrieved evidence, run the full audit, and upload a new document into the selected project namespace.

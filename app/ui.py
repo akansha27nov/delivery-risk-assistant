@@ -24,6 +24,18 @@ apply_custom_theme()
 st.title("🛡️ Delivery Evidence Auditor")
 st.markdown("Automated multi-angle evidence extraction, cost/impact estimation, citation gating, and deterministic HITL routing.")
 
+# --- Caching Decorators for Demo Speed & Cost Saving ---
+
+@st.cache_resource
+def get_cached_graph():
+    """Caches the compiled LangGraph workflow object in memory."""
+    return build_graph()
+
+@st.cache_data(ttl=600)
+def cached_gather_evidence(project_choice: str, user_question: str):
+    """Caches retrieval and reranking results for 10 minutes."""
+    return asyncio.run(gather_evidence_async(project_choice, user_question))
+
 # ==========================================
 # SIDEBAR: Configuration & Controls
 # ==========================================
@@ -34,13 +46,17 @@ if "retrieved_evidence" not in st.session_state:
     st.session_state.retrieved_evidence = []
 if "audit_result" not in st.session_state:
     st.session_state.audit_result = None
-
 # ==========================================
 # STEP A: EVIDENCE INSPECTION PANEL
 # ==========================================
 if run_inspection or run_audit:
     with st.spinner(f"Gathering evidence for '{project_choice.upper()}'..."):
-        st.session_state.retrieved_evidence = asyncio.run(gather_evidence_async(project_choice, user_question))
+        try:
+            st.session_state.retrieved_evidence = cached_gather_evidence(project_choice, user_question)
+        except Exception as e:
+            st.error(f"⚠️ Evidence retrieval hiccup: {e}")
+            st.info("💡 Tip: Check your API keys or network connection.")
+            st.session_state.retrieved_evidence = []
 
 if st.session_state.retrieved_evidence and not run_audit:
     st.subheader(f"🔍 Evidence Inspection Panel — Project: {project_choice.upper()}")
@@ -54,17 +70,24 @@ if st.session_state.retrieved_evidence and not run_audit:
 # ==========================================
 if run_audit:
     with st.spinner(f"Executing LangGraph pipeline for '{project_choice.upper()}'..."):
-        st.session_state.audit_result = asyncio.run(build_graph().ainvoke({
-            "project": project_choice, 
-            "question": user_question
-        }))
-        
-        # Save sample report
-        samples_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../samples"))
-        os.makedirs(samples_dir, exist_ok=True)
-        with open(os.path.join(samples_dir, f"{project_choice}_risk_report.md"), "w", encoding="utf-8") as f:
-            f.write(generate_sample_report_markdown(project_choice, st.session_state.audit_result))
+        try:
+            graph = get_cached_graph()
+            st.session_state.audit_result = asyncio.run(graph.ainvoke({
+                "project": project_choice, 
+                "question": user_question
+            }))
+            
+            # Save sample report safely
+            samples_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../samples"))
+            os.makedirs(samples_dir, exist_ok=True)
+            with open(os.path.join(samples_dir, f"{project_choice}_risk_report.md"), "w", encoding="utf-8") as f:
+                f.write(generate_sample_report_markdown(project_choice, st.session_state.audit_result))
+                
+        except Exception as e:
+            st.error(f"⚠️ Pipeline execution error: {e}")
+            st.info("💡 Tip: Verify your OpenAI and Pinecone API keys in the .env file.")
 
+# Persistent Rendering from Session State
 if st.session_state.audit_result:
     result = st.session_state.audit_result
     res_container = result.get("result", result)
@@ -89,7 +112,6 @@ if st.session_state.audit_result:
 
     st.markdown("---")
     
-    # Use imported UI components to render the rest of the page
     render_executive_summary(res_container.get("risks", []), st.session_state.retrieved_evidence, requires_hitl)
     st.markdown("---")
     render_risk_breakdown(res_container.get("risks", []), st.session_state.retrieved_evidence)

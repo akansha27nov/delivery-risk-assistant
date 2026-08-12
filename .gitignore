@@ -4,3 +4,4 @@ src/*.pyc
 src/__pycache__/*.pyc
 tests/__pycache__/*.pyc
 .coverage
+app/__pycache__/*.pyc

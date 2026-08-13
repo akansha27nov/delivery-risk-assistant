@@ -58,6 +58,27 @@ def test_validate_citations_rejects_fabricated_contradiction():
     assert validated[0]["contradiction_grounded"] is False
 
 
+def test_validate_citations_rejects_single_chunk_contradiction_signal():
+    risks = [{
+        "risk": "Single chunk contradiction",
+        "explanation": "The same chunk is claimed to show both green status and a blocker.",
+        "citations": ["status_update.md::chunk0"],
+        "impact_breakdown": {"delivery_impact": "high"},
+        "confidence_tag": "directional_estimate",
+        "is_contradiction": True,
+    }]
+    evidence = [
+        {
+            "chunk_id": "status_update.md::chunk0",
+            "text": "Status: green, but we're still blocked on API credentials.",
+        }
+    ]
+
+    validated = validate_citations(risks, evidence)
+    assert validated[0]["valid"] is False
+    assert validated[0]["contradiction_grounded"] is False
+
+
 def test_validate_citations_allows_grounded_contradiction():
     risks = [{
         "risk": "Status contradiction",

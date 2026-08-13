@@ -49,10 +49,19 @@ def _has_grounded_status_claim(citations: list[str], evidence_map: dict) -> bool
 
 
 def _has_grounded_contradiction(citations: list[str], evidence_map: dict) -> bool:
-    return _has_grounded_status_claim(citations, evidence_map) and any(
-        _chunk_text_has_any(evidence_map.get(cid, {}).get("text") or "", _CONTRADICTION_SIGNAL_PHRASES)
-        for cid in citations
-    )
+    status_citations = [
+        cid for cid in citations
+        if _chunk_text_has_any(evidence_map.get(cid, {}).get("text") or "", _STATUS_CLAIM_PHRASES)
+    ]
+    problem_citations = [
+        cid for cid in citations
+        if _chunk_text_has_any(evidence_map.get(cid, {}).get("text") or "", _CONTRADICTION_SIGNAL_PHRASES)
+    ]
+
+    # A contradiction must be supported by two distinct pieces of evidence:
+    # one chunk that actually makes a positive status claim and another chunk
+    # that actually describes the blocking/problem condition.
+    return bool(status_citations and problem_citations and set(status_citations) != set(problem_citations))
 
 
 def _check_context_consistency(valid_cites: list, evidence_map: dict):

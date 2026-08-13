@@ -1,6 +1,6 @@
-# Delivery Evidence Auditor
+# AI Delivery Risk Assistant
 
-An AI evidence auditor that reads real project artefacts, retrieves the most relevant evidence, and surfaces delivery risks with citable proof instead of generic status summaries.
+An AI Delivery Risk Assistant that reads real project artefacts, retrieves the most relevant evidence, and surfaces delivery risks with citable proof instead of generic status summaries.
 
 The core principle: **If a risk cannot be directly grounded in source chunks, it is not reported.**
 
@@ -40,13 +40,15 @@ The system programmatically generates executive markdown reports in the `samples
 ## 🚀 Future GTM Sprints
 
 See [`gtm_future_sprints.md`](gtm_future_sprints.md) for the complete Go-To-Market roadmap, including:
-- **Sprint 1 (Jira & Slack Direct Connectors):** Targeting VP of Engineering / Delivery Leads.
-- **Sprint 2 (Automated Executive Briefings & Telegram HITL Approval):** Targeting Operations & Program Managers.
-- **Sprint 3 (SOC2/Compliance Audit Trails):** Targeting Chief Information Security Officers (CISOs).
+- **Sprint 1 (Pilot Validation):** Targeting 1–2 engineering managers or delivery leads (warm network intro).
+- **Sprint 2 (Enterprise Slack & Jira Native Integration):** Targeting Engineering Managers, Tech Leads, and VP of Engineering.
+- **Sprint 3 (Executive Cross-Project Portfolio Dashboard & Predictive Analytics):** Targeting Chief Technology Officer (CTO), VP of Product Delivery, and Director of Engineering Operations.
 
 ---
 
-## 🧩 Architecture & Pipeline Overview
+## 🧩 System Architecture & Execution Workflow
+
+### Pipeline Overview
 
 ```
 [Inbound Artifacts] (.md, .txt, .csv)
@@ -69,6 +71,36 @@ Citation Validation & Context Verification Loop
 └── SEV-1 / Contradiction ➔ Escalated via Telegram HITL
 ```
 
+### 🏗️ System Architecture
+
+![System Architecture](docs/architecture_diagram.png)
+
+The **AI Delivery Risk Assistant** runs on a central **LangGraph** deterministic state machine (`graph.py`) that orchestrates retrieval, evaluation, and downstream reporting across multiple interfaces and integrations.
+
+* **Entrypoints:**
+  * **Streamlit UI:** Interactive dashboard for uploading documents, inspecting chunks, and running audits (`app/ui.py`).
+  * **FastAPI:** RESTful endpoint (`POST /run-audit`) for programmatic execution.
+  * **CLI:** Local terminal execution script (`src/cli_runner.py`).
+  * **n8n Schedule Trigger:** Automated weekly cron trigger running every Thursday.
+* **External Services & Stack:**
+  * **OpenAI:** Generates vector embeddings and powers structured LLM extraction.
+  * **Pinecone:** Multi-tenant vector database separated by per-project namespaces.
+  * **Cohere Rerank (`rerank-v3.5`):** Cross-encoder reranking to filter candidate evidence pools.
+  * **Telegram Bot API:** Real-time push notifications for human approval requests.
+* **Outputs:** Generates local **Markdown Reports** (`samples/*.md`), automated **Notion Pages** (via n8n), and **Telegram Alerts** for flagged risks.
+
+---
+### 🔄 Execution Flow & Decision Tree
+![Workflow Diagram](docs/workflow_diagram.png)
+
+The underlying graph executes through a strict, node-based decision tree to prevent hallucinated risks and enforce safety gates:
+
+1. **Retrieval Gate (`retrieve_documents`):** Checks if candidate evidence exists for the prompt. If none is found, it terminates early at `ask_for_more_documents`.
+2. **Analysis & Citation Validation (`analyse_risks` → `validate_citations`):** Extracts risks with source citations. If citation validation fails (unsupported or hallucinated claims), the graph routes to `reject_response`.
+3. **Severity & HITL Escalation (`evaluate_severity`):** Validated risks are evaluated for severity.
+   * **SEV-1 / High Severity:** Triggers deterministic human-in-the-loop routing via `route_to_hitl`.
+   * **Standard Audit:** Directly outputs the final audit summary via `generate_report`.
+
 ---
 
 ## 🛠️ Tools & API Integrations
@@ -90,13 +122,6 @@ Create a `.env` file at the repository root with the following keys:
 OPENAI_API_KEY=your_openai_api_key
 PINECONE_API_KEY=your_pinecone_api_key
 COHERE_API_KEY=your_cohere_api_key
-
-# Optional Configurations
-PINECONE_INDEX=delivery-evidence-auditor
-LLM_MODEL=gpt-4o-mini
-EMBEDDING_MODEL=text-embedding-3-small
-
-# Optional Human-In-The-Loop Alerts
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 TELEGRAM_CHAT_ID=your_telegram_chat_id
 ```
@@ -105,20 +130,27 @@ TELEGRAM_CHAT_ID=your_telegram_chat_id
 ```
 .
 ├── app/
-│   |── ui.py                  # Streamlit Web UI Entrypoint
-│   ├── cards.py                
-│   ├── sidebar.py 
-│   └── theme.py 
+│   ├── cards.py               # UI cards for executive summary and risk breakdown
+│   ├── sidebar.py             # Streamlit sidebar controls and upload flow
+│   ├── theme.py                # Theme helpers used by the Streamlit UI
+│   └── ui.py                  # Streamlit web UI entrypoint
 ├── src/
-│   ├── agent.py                # LLM risk extraction & citation validation logic
-│   ├── api.py                  # FastAPI wrapper for triggering audits
-│   ├── chunking.py             # Converts documents into citable evidence units with stable `chunk_id` values.
-│   ├── cli_runner.py           # Command-line audit runner
-│   ├── embedding.py            # Pinecone index management
-│   ├── graph.py                # LangGraph state machine definition
-│   ├── ingestion.py            # Document loader (.md, .txt, .csv) sources from `knowledge_base/`
-│   ├── reporting.py            # Programmatic Markdown report builder
-│   └── retrieval.py            # Multi-angle retrieval & Cohere reranking
+│   ├── agent.py               # Compatibility facade that re-exports the agent API
+│   ├── agent_analysis.py      # OpenAI risk extraction, parsing, and deduplication helpers
+│   ├── agent_models.py        # Pydantic schemas for extracted risks and impact breakdowns
+│   ├── agent_validation.py    # Citation, context, and contradiction validation logic
+│   ├── api.py                 # FastAPI wrapper for triggering audits
+│   ├── chunking.py            # Converts documents into citable evidence units with stable chunk IDs
+│   ├── cli_runner.py          # Command-line audit runner
+│   ├── config.py              # Environment and model configuration
+│   ├── embedding.py           # Pinecone index management
+│   ├── graph.py               # LangGraph state machine definition and HITL routing
+│   ├── ingestion.py           # Document loader for .md, .txt, and .csv sources
+│   ├── logger.py              # Shared console and file logger configuration
+│   ├── prompts.py             # System prompts used by the LLM agent
+│   ├── reporting.py           # Programmatic Markdown report builder
+│   ├── rerank.py              # Cohere reranking helper
+│   └── retrieval.py           # Multi-angle retrieval over project namespaces
 ├── tests/                      # contains unit tests plus grounded integration checks.
 ├── samples/                    # System-generated audit reports
 │   ├── atlas_risk_report.md
@@ -136,37 +168,25 @@ TELEGRAM_CHAT_ID=your_telegram_chat_id
 
 ```
 
-## Requirements
-
-The project uses the packages listed in `requirements.txt`, including:
-
-- LangChain and LangGraph
-- OpenAI
-- Pinecone
-- Cohere
-- Streamlit
-- FastAPI and pytest
-
-## Environment Variables
-
-Create a `.env` file at the repository root with at least:
-
-- `OPENAI_API_KEY`
-- `PINECONE_API_KEY`
-- `COHERE_API_KEY`
-
-Optional variables:
-
-- `PINECONE_INDEX` defaulting to `delivery-risk-assistant`
-- `LLM_MODEL` defaulting to `gpt-4o-mini`
-- `EMBEDDING_MODEL` defaulting to `text-embedding-3-small`
-- `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` for human-in-the-loop alerts
-
 ## Setup
 
 ```bash
 pip install -r requirements.txt
 ```
+
+---
+
+## 🌐 Live API Deployment
+
+The backend FastAPI service is deployed live on **Render** to provide a persistent, secure HTTPS endpoint for automated integrations (such as the **n8n** workflow).
+
+* **Base URL:** `https://delivery-risk-api.onrender.com`
+* **Interactive OpenAPI Docs:** [`https://delivery-risk-api.onrender.com/docs`](https://delivery-risk-api.onrender.com/docs)
+* **Primary Audit Endpoint:** `POST /run-audit`
+
+### ⚡ Key Infrastructure Notes
+* **Automated CI/CD:** Any updates pushed to the `main` branch automatically trigger a build and redeployment on Render.
+* **Instance Cold Starts:** Render's free tier automatically spins down after 15 minutes of inactivity. The initial incoming request after a sleep period may experience a **30–50 second delay** while the container boots up.
 
 ## Run The Project
 
@@ -233,3 +253,31 @@ If you want to run the full suite, include the grounding test only when the exte
 - **False Positive Elimination:** Resolved or historical issues are filtered out from current risk metrics.
 - **HITL Routing:** High-severity risks (SEV-1) or status contradictions trigger human approval workflows.
 - The **Streamlit app** includes a live upload flow that adds a new file into an existing project namespace without clearing the rest of the index.
+
+---
+
+## 📖 Terminology & Glossary
+
+This section breaks down the core concepts, UI metrics, and system terminology used throughout the **Delivery Evidence Auditor**.
+
+### 🎛️ System & Inputs
+* **Project Scope:** Namespace isolation in the vector database (e.g., `atlas`, `nova`) ensuring evidence and search contexts remain completely separated between projects or teams.
+* **Knowledge Base:** The underlying vector store (Pinecone) holding embedded text chunks from uploaded sprint reports, ticket exports, and meeting transcripts.
+* **Inspect Evidence:** An intermediate transparency check that displays retrieved candidate text chunks and their rerank scores *before* running full LLM risk extraction.
+
+### 📊 Dashboard & Metrics
+* **Human-in-the-Loop (HITL):** A deterministic safety gate. If the pipeline detects SEV-1 blockers or severe data contradictions, it pauses or escalates alerts to human managers (via Telegram) for manual review.
+* **Delivery Health:** A high-level visual pulse check using a traffic light system:
+  * 🔴 **RED (Critical):** Contains SEV-1 blockers or active HITL escalations.
+  * 🟡 **YELLOW (Warning):** Contains medium or low-severity delivery risks to monitor.
+  * 🟢 **GREEN (Clear):** No significant delivery risks or blockers flagged.
+* **Risk Score:** A normalized score out of 100 representing project health. Points are automatically deducted based on the volume and severity of detected risks.
+* **Grounded Findings:** An anti-hallucination metric showing the percentage of extracted claims that are directly backed up by verified source document citations.
+* **SEV-1 (Severity-1):** Critical-path blockers (e.g., missing API credentials, blocked launch dependencies) that directly threaten target delivery dates.
+
+### 🛡️ Risk Analysis & Verification
+* **Evidence Confidence:** A percentage score calculating how strongly the retrieved evidence supports a specific risk finding, based on document depth and semantic relevance.
+* **Data Tag:** A provenance label attached to findings (e.g., `directional_estimate`, `explicit_fact`) that tells executives whether a claim is an exact source statement or a calculated AI projection.
+* **Business Impact Grid:** A 4-axis breakdown evaluating how a technical risk impacts **Delivery**, **Customer Experience**, **Business/Revenue**, and **Team Morale**.
+* **Forensic Evidence Inspector:** An expandable "receipts" panel providing direct access to the exact raw text chunks, source file locations, and citation metadata used by the LLM.
+* **Rerank Score:** A semantic relevance score generated by **Cohere Rerank** (`rerank-v3.5`) used to prioritize candidate evidence chunks before LLM processing.

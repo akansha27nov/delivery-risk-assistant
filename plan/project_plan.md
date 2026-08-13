@@ -1,8 +1,8 @@
-# AI Delivery Evidence Auditor — Project Plan
+# AI Delivery Risk Assistant — Project Plan
 
 ## 1. Use Case
 
-**Project**: AI Delivery Evidence Auditor — a citation-gated evidence-auditing pipeline that surfaces delivery risks and status contradictions from project artefacts, with deterministic escalation to a human for the highest-stakes findings.
+**Project**: AI Delivery Risk Assistant — a citation-gated evidence-auditing pipeline that surfaces delivery risks and status contradictions from project artefacts, with deterministic escalation to a human for the highest-stakes findings.
 
 **Problem statement**: Programme leaders spend hours a week manually piecing together delivery risk from sprint reports, tickets, postmortems, and status emails — and status can quietly diverge from reality between what's reported up and what's actually happening in the tracker, with no automated check catching the gap before it reaches leadership.
 
@@ -106,6 +106,7 @@
 | Technical | Telegram approval step blocks the pipeline indefinitely with no response | Low | Medium | Timeout with a defined fallback state (marked pending, not silently dropped) |
 | Data | Synthetic evaluation does not represent production enterprise variability | Medium | Medium | Explicit in documentation: the MVP demonstrates architecture and controlled behavior, not production-scale detection accuracy; a diverse synthetic corpus with deliberate edge cases mitigates but doesn't remove this |
 | Business/Scope | Overstating what the system guarantees (e.g. claiming detection accuracy it hasn't measured) | Medium | High | Structural guarantees (code-enforced) kept explicitly separate from judgment-based detection quality in all documentation |
+| Technical | LLM asserts a status contradiction (`is_contradiction=true`) without the cited evidence containing a matching status claim | Medium | High | Deterministic post-check (`_has_grounded_status_claim`) requires at least one citation's raw text to contain a literal status-claim phrase before a contradiction risk is accepted. Found via a real production run (Atlas, 2026-08-13), not hypothetically |
 
 ---
 

@@ -22,10 +22,12 @@ Hard rules:
    (a blocked ticket, an open incident remediation, a missed deadline) that contradicts it.
    If you find such a contradiction, you MUST report it as one of your top risks -- ranked above
    softer or less specific risks -- citing BOTH the status claim chunk and the chunk(s) it
-   contradicts. Do not silently resolve the contradiction in the status claim's favor, and do
-   not just report the underlying issue without naming the contradiction itself as the risk.
-   If a contradiction exists, you MUST set "is_contradiction": true in your output. Otherwise,
-   set it to false.
+   contradicts. If MORE THAN ONE chunk in the evidence corroborates the underlying contradicted issue (e.g.
+   the same open ticket or incident is independently referenced in a retro, a Slack thread, and
+   a postmortem), cite ALL of those corroborating chunks, not just one -- a contradiction risk
+   backed by three independent sources is stronger evidence than one backed by two, and your
+   citations should reflect the full weight of what's actually in the evidence, not the first
+   match you find.
 5. REQUIRED CHECK, every time: scan the evidence for new work, tickets, or requests added
    to a sprint/project OUTSIDE of original planning -- phrases like "added mid-sprint",
    "outside of planning", "wasn't part of the original plan", or a stakeholder asking for

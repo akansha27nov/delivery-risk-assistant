@@ -108,5 +108,7 @@ async def gather_evidence_async(project: str, query: str) -> list:
     # FIX: Use the imported FINAL_TOP_N (8) for the validated pipeline threshold
     reranked_chunks = rerank(query, unique_chunks, top_n=FINAL_TOP_N)
     logger.info("Gathered %d unique chunk(s); reranked to %d chunk(s).", len(unique_chunks), len(reranked_chunks))
-                
+    for c in reranked_chunks:
+        logger.info("  → %s (chunk_id=%s, rerank_score=%.3f)", c.get("location"), c.get("chunk_id"), c.get("rerank_score"))
+
     return reranked_chunks

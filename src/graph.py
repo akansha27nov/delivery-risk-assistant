@@ -18,7 +18,8 @@ from retrieval import gather_evidence_async
 from config import (
     MIN_EVIDENCE_CHUNKS,
     TELEGRAM_BOT_TOKEN,
-    TELEGRAM_CHAT_ID
+    TELEGRAM_CHAT_ID,
+    TELEGRAM_ALERTS_ENABLED
 )
 from logger import get_logger
 
@@ -104,6 +105,8 @@ def reject_response(state: GraphState) -> GraphState:
             reasons.append(f"\"{r['risk']}\" -- context mismatch: {r.get('context_mismatch_detail', '')}")
         elif not r.get("citations"):
             reasons.append(f"\"{r['risk']}\" -- no valid citation")
+        elif not r.get("contradiction_grounded", True):
+            reasons.append(f"\"{r['risk']}\" -- claims a status contradiction but no cited chunk contains a matching status claim")
         else:
             reasons.append(f"\"{r['risk']}\" -- missing required confidence tag or impact breakdown")
 
@@ -146,7 +149,7 @@ def route_to_hitl(state: dict) -> dict:
     # Track the actual outcome of the Telegram API call
     ui_message = ""
     
-    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+    if TELEGRAM_ALERTS_ENABLED and TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         payload = {
             "chat_id": TELEGRAM_CHAT_ID,
@@ -160,6 +163,9 @@ def route_to_hitl(state: dict) -> dict:
         except Exception as e:
             logger.exception("Error sending Telegram notification for project '%s': %s", project, e)
             ui_message = "High-severity risk detected, but Telegram delivery failed (Network/API Error). Check console for details."
+    elif not TELEGRAM_ALERTS_ENABLED:
+        logger.info("Telegram HITL alert suppressed for project '%s' (TELEGRAM_ALERTS_ENABLED=false).", project)
+        ui_message = "High-severity risk or status contradiction detected. Telegram alert suppressed (disabled)."
     else:
         logger.warning("Telegram credentials missing. Skipping notification delivery.")
         ui_message = "High-severity risk detected, but Telegram credentials are missing in the environment. Alert not sent."

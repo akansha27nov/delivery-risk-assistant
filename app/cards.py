@@ -18,7 +18,7 @@ def render_executive_summary(risks, evidence_pool, requires_hitl):
     if high_risks > 0 or requires_hitl:
         health_color = "🔴 Red"
     elif medium_risks > 0:
-        health_color = "🟠 Amber"
+        health_color = "🟡 Yellow"
     else:
         health_color = "🟢 Green"
 

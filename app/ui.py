@@ -20,10 +20,10 @@ from sidebar import render_sidebar
 load_dotenv()
 logger = get_logger(__name__)
 
-st.set_page_config(page_title="Delivery Evidence Auditor", layout="wide")
+st.set_page_config(page_title="Delivery Risk Assistant", layout="wide")
 apply_custom_theme()
 
-st.title("🛡️ Delivery Evidence Auditor")
+st.title("🛡️ Delivery Risk Assistant")
 st.markdown("Automated multi-angle evidence extraction, cost/impact estimation, citation gating, and deterministic HITL routing.")
 
 # --- Caching Decorators for Demo Speed & Cost Saving ---

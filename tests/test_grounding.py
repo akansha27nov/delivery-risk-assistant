@@ -7,10 +7,12 @@ Cohere), so they need OPENAI_API_KEY, PINECONE_API_KEY, COHERE_API_KEY set
     cd src
     pytest ../tests/test_grounding.py -v
 """
+import os
 import asyncio
 import sys
 from pathlib import Path
- 
+os.environ.setdefault("TELEGRAM_ALERTS_ENABLED", "false")
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
  
 from graph import build_graph 

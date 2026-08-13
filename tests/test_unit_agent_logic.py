@@ -35,3 +35,49 @@ def test_validate_citations_context_mismatch_caps_confidence():
     validated = validate_citations(risks, evidence)
     assert validated[0]["valid"] is False
     assert validated[0]["evidence_confidence"] <= 20
+
+
+def test_validate_citations_rejects_fabricated_contradiction():
+    risks = [{
+        "risk": "Fabricated contradiction",
+        "explanation": "The standup claims the team is on track.",
+        "citations": ["standup_transcript.txt::chunk0"],
+        "impact_breakdown": {"delivery_impact": "high"},
+        "confidence_tag": "directional_estimate",
+        "is_contradiction": True,
+    }]
+    evidence = [
+        {
+            "chunk_id": "standup_transcript.txt::chunk0",
+            "text": "Still blocked. If we don't get the API credentials by Friday I don't think we make the August 14th launch date.",
+        }
+    ]
+
+    validated = validate_citations(risks, evidence)
+    assert validated[0]["valid"] is False
+    assert validated[0]["contradiction_grounded"] is False
+
+
+def test_validate_citations_allows_grounded_contradiction():
+    risks = [{
+        "risk": "Status contradiction",
+        "explanation": "A green status update conflicts with the blocked launch ticket.",
+        "citations": ["status_update.md::chunk0", "ticket_export.csv::ATL-142"],
+        "impact_breakdown": {"delivery_impact": "high"},
+        "confidence_tag": "directional_estimate",
+        "is_contradiction": True,
+    }]
+    evidence = [
+        {
+            "chunk_id": "status_update.md::chunk0",
+            "text": "Status: green. No blockers to flag this week.",
+        },
+        {
+            "chunk_id": "ticket_export.csv::ATL-142",
+            "text": "ticket_id: ATL-142; summary: blocked by external API credentials; status: Blocked",
+        },
+    ]
+
+    validated = validate_citations(risks, evidence)
+    assert validated[0]["valid"] is True
+    assert validated[0]["contradiction_grounded"] is True

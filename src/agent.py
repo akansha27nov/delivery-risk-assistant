@@ -144,6 +144,7 @@ def analyse_risks(chunks: list[dict]) -> list[dict]:
     logger.info("Analysing %d evidence chunk(s) for delivery risks.", len(chunks))
     parsed_response = _call_llm(evidence_text)
     risks = _parse_risks_response(parsed_response)
+    risks = _expand_citations_with_ticket_corroboration(risks, chunks)
     logger.info("Extracted %d risk(s) before deduplication.", len(risks))
     return _dedupe_same_ticket_risks(risks)
  
@@ -190,6 +191,81 @@ def _find_duplicate_risk_indices(risks: list[dict]) -> set:
                 to_drop.add(j if len(cites_i) >= len(cites_j) else i)
     return to_drop
 
+# Mirrors the exact phrases Rule 4 tells the LLM to scan for. Citation
+# existence alone doesn't verify the SPECIFIC claim a contradiction risk
+# makes -- only that citations point to real text. A contradiction is
+# grounded only when the cited evidence contains both:
+#   1) a positive/general status claim, and
+#   2) a concrete blocking/problem signal that can actually contradict it.
+#
+# This blocks the Atlas failure mode where the model asserted a positive
+# status claim that never existed in the evidence pool, while still
+# allowing legitimate contradiction risks that cite both a status update
+# and the underlying blocker or incident.
+_STATUS_CLAIM_PHRASES = ("on track", "green", "no blockers", "all good", "no issues to flag")
+_CONTRADICTION_SIGNAL_PHRASES = (
+    "blocked",
+    "blocking",
+    "delay",
+    "delayed",
+    "late",
+    "at risk",
+    "missed",
+    "won't make",
+    "wont make",
+    "not make",
+    "can't make",
+    "cannot make",
+    "slip",
+    "slipping",
+    "unassigned",
+    "sev-1",
+)
+
+
+def _chunk_text_has_any(text: str, phrases: tuple[str, ...]) -> bool:
+    lowered = (text or "").lower()
+    return any(phrase in lowered for phrase in phrases)
+
+
+def _has_grounded_status_claim(citations: list[str], evidence_map: dict) -> bool:
+    for cid in citations:
+        text = evidence_map.get(cid, {}).get("text") or ""
+        if _chunk_text_has_any(text, _STATUS_CLAIM_PHRASES):
+            return True
+    return False
+
+
+def _has_grounded_contradiction(citations: list[str], evidence_map: dict) -> bool:
+    return _has_grounded_status_claim(citations, evidence_map) and any(
+        _chunk_text_has_any(evidence_map.get(cid, {}).get("text") or "", _CONTRADICTION_SIGNAL_PHRASES)
+        for cid in citations
+    )
+
+def _expand_citations_with_ticket_corroboration(risks: list[dict], chunks: list[dict]) -> list[dict]:
+    """
+    Rule 4's prompt instruction to "cite all corroborating chunks" was tested against a
+    real run and did not change model behavior, even though the corroborating chunks 
+    were present in the evidence pool the whole time. This guarantees the citation list 
+    includes every chunk that references the same specific ticket ID the risk's own text
+     already names -- it never removes a citation, and it's a no-op for risks with
+    no ticket ID in their text (e.g. the single-source people-risk case
+    stays untouched, by construction).
+    """
+    for r in risks:
+        ids_in_risk = set(_TICKET_ID_PATTERN.findall(r.get("explanation", "") + " " + r.get("risk", "")))
+        if not ids_in_risk:
+            continue
+        existing = set(r.get("citations", []))
+        for c in chunks:
+            cid = c.get("chunk_id")
+            if cid in existing:
+                continue
+            chunk_ids = set(_TICKET_ID_PATTERN.findall(c.get("text", "") or ""))
+            if chunk_ids & ids_in_risk:
+                existing.add(cid)
+        r["citations"] = sorted(existing)
+    return risks
 
 def _dedupe_same_ticket_risks(risks: list[dict]) -> list[dict]:
     drop = _find_duplicate_risk_indices(risks)
@@ -276,9 +352,15 @@ def validate_citations(risks: list[dict], evidence) -> list[dict]:
             context_consistent, context_mismatch_detail = _check_context_consistency(
                 valid_cites, evidence_map
             )
+        contradiction_grounded = True
+        if r.get("is_contradiction"):
+            contradiction_grounded = False
+            if evidence_map and has_valid_citation:
+                contradiction_grounded = _has_grounded_contradiction(valid_cites, evidence_map)
 
         is_valid = (
-            has_valid_citation and has_impact and has_confidence_tag and context_consistent
+            has_valid_citation and has_impact and has_confidence_tag
+            and context_consistent and contradiction_grounded
         )
 
         # ==========================================
@@ -336,6 +418,7 @@ def validate_citations(risks: list[dict], evidence) -> list[dict]:
         r["citations"] = valid_cites
         r["evidence_confidence"] = evidence_confidence
         r["context_consistent"] = context_consistent
+        r["contradiction_grounded"] = contradiction_grounded
         r["context_mismatch_detail"] = context_mismatch_detail
         r["confidence_breakdown"] = {
             "citation_valid": has_valid_citation,

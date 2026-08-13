@@ -42,3 +42,11 @@ RISK_ANGLES = [
     "SEV-1 incidents, postmortems, outages, or unassigned critical remediation tickets",
     "status updates and whether they match the evidence in tickets and discussions",
 ]
+
+# ===========================================================
+# 📣 Human-in-the-Loop / Notification Settings
+# ===========================================================
+# Lets tests (or any non-interactive run) suppress real Telegram delivery
+# without touching the routing/decision-tree logic itself. Defaults to
+# enabled so normal runs are unaffected.
+TELEGRAM_ALERTS_ENABLED = os.getenv("TELEGRAM_ALERTS_ENABLED", "true").lower() == "true"

@@ -18,14 +18,14 @@ The core principle: **If a risk cannot be directly grounded in source chunks, it
 
 ## Pipeline
 
-1. Ingest source files
-2. Chunk content into evidence units
-3. Embed and store chunks in Pinecone namespaces
-4. Retrieve evidence across multiple risk angles
-5. Rerank the retrieved pool
-6. Extract risks with the LLM
-7. Validate citations and severity
-8. Generate a report or escalate to human review
+1. Ingest source files and live uploads.
+2. Chunk content into stable evidence units.
+3. Embed chunks and store them in Pinecone project namespaces.
+4. Retrieve evidence across multiple risk angles.
+5. Rerank the candidate pool with Cohere.
+6. Extract risks with the LLM.
+7. Validate citations, context, and contradiction grounding.
+8. Route to a Markdown report, Notion delivery, or Telegram HITL escalation.
 
 ---
 
@@ -34,6 +34,12 @@ The core principle: **If a risk cannot be directly grounded in source chunks, it
 The system programmatically generates executive markdown reports in the `samples/` folder:
 - **Project Atlas:** [`samples/atlas_risk_report.md`](samples/atlas_risk_report.md)
 - **Project Nova:** [`samples/nova_risk_report.md`](samples/nova_risk_report.md)
+
+## 🎥 Demo Assets
+
+- **Demo recording:** [`docs/Demo_recording.mov`](docs/Demo_recording.mov)
+- **Slide deck (PDF):** [`docs/AI_Delivery_Risk_Assistant_Deck.pdf`](docs/AI_Delivery_Risk_Assistant_Deck.pdf)
+- **Slide deck (PPTX):** [`docs/AI_Delivery_Risk_Assistant_Deck.pptx`](docs/AI_Delivery_Risk_Assistant_Deck.pptx)
 
 ---
 
@@ -48,32 +54,57 @@ See [`gtm_future_sprints.md`](gtm_future_sprints.md) for the complete Go-To-Mark
 
 ## 🧩 System Architecture & Execution Workflow
 
-### Pipeline Overview
-
-```
-[Inbound Artifacts] (.md, .txt, .csv)
-                │
-                ▼
-Document Ingestion & Chunking (Stable chunk_ids)
-                │
-                ▼
-Vector Embedding (OpenAI) ➔ Pinecone Namespaces
-                │
-                ▼
-Multi-Angle Retrieval ➔ Cohere Reranking
-                │
-                ▼
-Structured LLM Risk Extraction (Grounded Citations)
-                │
-                ▼
-Citation Validation & Context Verification Loop
-├── Valid ➔ Generate Markdown Report (/samples)
-└── SEV-1 / Contradiction ➔ Escalated via Telegram HITL
-```
-
 ### 🏗️ System Architecture
 
-![System Architecture](docs/architecture_diagram.png)
+```text
+                    +----------------------+
+                    |   Streamlit UI       |
+                    |   app/ui.py          |
+                    +----------+-----------+
+                               |
+                               v
+                    +----------------------+
+                    |      FastAPI         |
+                    |    POST /run-audit   |
+                    +----------+-----------+
+                               |
+                               v
+                    +----------------------+
+                    |  CLI / n8n Trigger   |
+                    |  cli_runner.py       |
+                    +----------+-----------+
+                               |
+                               v
+                 +----------------------------------+
+                 |     graph.py / LangGraph         |
+                 | deterministic audit state machine|
+                 +-----------------+----------------+
+                                   |
+        +--------------------------+---------------------------+
+        |                          |                           |
+        v                          v                           v
++------------------+   +------------------------+   +------------------------+
+| ingestion.py     |   | retrieval.py           |   | agent_analysis.py      |
+| load documents   |-->| multi-angle Pinecone   |-->| OpenAI risk extraction |
+| project mapping  |   | retrieval + rerank     |   | + dedupe               |
++------------------+   +------------------------+   +------------------------+
+        |                          |                           |
+        v                          v                           v
++------------------+   +------------------------+   +------------------------+
+| chunking.py      |   | embedding.py           |   | agent_validation.py    |
+| stable chunks    |   | OpenAI -> Pinecone     |   | citations/context/HITL |
++------------------+   +------------------------+   +------------------------+
+                                   |
+                                   v
+                    +------------------------------+
+                    | Outputs                      |
+                    | - samples/*.md               |
+                    | - Notion via n8n             |
+                    | - Telegram alerts            |
+                    +------------------------------+
+```
+
+![System Architecture](docs/architecture_diagram.svg)
 
 The **AI Delivery Risk Assistant** runs on a central **LangGraph** deterministic state machine (`graph.py`) that orchestrates retrieval, evaluation, and downstream reporting across multiple interfaces and integrations.
 

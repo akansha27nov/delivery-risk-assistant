@@ -285,7 +285,7 @@ If you want to run the full suite, include the grounding test only when the exte
 
 ## 📖 Terminology & Glossary
 
-This section breaks down the core concepts, UI metrics, and system terminology used throughout the **Delivery Evidence Auditor**.
+This section breaks down the core concepts, UI metrics, and system terminology used throughout the **Delivery Risk Assistant**.
 
 ### 🎛️ System & Inputs
 * **Project Scope:** Namespace isolation in the vector database (e.g., `atlas`, `nova`) ensuring evidence and search contexts remain completely separated between projects or teams.

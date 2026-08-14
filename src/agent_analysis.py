@@ -1,5 +1,15 @@
 """
 LLM-backed risk extraction helpers.
+
+  - Grounding pre-check: a contradiction is only accepted if its citations contain
+    BOTH a real status claim AND a real problem signal. This stops fabricated
+    contradictions from entering the pipeline and rejecting the whole report, while preserving
+    genuine contradictions.
+  - Removed the over-aggressive fallback that treated every non-problem chunk as a
+    status claim.
+  - Pair-based skip logic (keeps the SEV-1 contradiction when a status chunk is
+    shared across two problem chunks).
+  - Stable chunk ordering + semantic contradiction dedup.
 """
 
 import re
@@ -9,7 +19,11 @@ from config import OPENAI_API_KEY, LLM_MODEL
 from logger import get_logger
 from prompts import SYSTEM_PROMPT
 from agent_models import RiskExtractionResponse
-from agent_validation import _chunk_text_has_any, _STATUS_CLAIM_PHRASES, _CONTRADICTION_SIGNAL_PHRASES
+from agent_validation import (
+    _chunk_text_has_any,
+    _STATUS_CLAIM_PHRASES,
+    _CONTRADICTION_SIGNAL_PHRASES,
+)
 
 logger = get_logger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
@@ -60,36 +74,70 @@ def _parse_risks_response(parsed_response: Optional[RiskExtractionResponse]) -> 
             "confidence_tag": risk.confidence_tag,
             "is_sev1": risk.is_sev1,
             "is_contradiction": risk.is_contradiction,
-            "recommendations": risk.recommendations
+            "recommendations": risk.recommendations,
         })
     return parsed_risks
+
+
+def _is_grounded_contradiction(risk: dict, chunks: list[dict]) -> bool:
+    """
+    A contradiction is only grounded if its citations include at least one chunk
+    that makes a positive status claim AND at least one chunk that carries a
+    problem/blocking signal. This is the same rule the validator uses, applied
+    EARLY so fabricated contradictions never enter the pipeline.
+    """
+    chunk_map = {c.get("chunk_id"): c for c in chunks}
+    cites = set(risk.get("citations", []))
+    has_status = any(
+        _chunk_text_has_any(chunk_map.get(c, {}).get("text", ""), _STATUS_CLAIM_PHRASES)
+        for c in cites
+    )
+    has_problem = any(
+        _chunk_text_has_any(chunk_map.get(c, {}).get("text", ""), _CONTRADICTION_SIGNAL_PHRASES)
+        for c in cites
+    )
+    return has_status and has_problem
 
 
 def _find_duplicate_risk_indices(risks: list[dict]) -> set:
     """
     Deterministic backstop for the specific pattern Rule 9 targets.
+    Enhanced to catch exact title/citation duplicates when ticket IDs are missing.
     """
     to_drop = set()
     for i in range(len(risks)):
         if i in to_drop:
             continue
-        ids_i = set(_TICKET_ID_PATTERN.findall(risks[i].get("explanation", "") + " " + risks[i].get("risk", "")))
-        cites_i = set(risks[i].get("citations", []))
+        
+        r_i = risks[i]
+        ids_i = set(_TICKET_ID_PATTERN.findall(r_i.get("explanation", "") + " " + r_i.get("risk", "")))
+        cites_i = set(r_i.get("citations", []))
+        title_i = r_i.get("risk", "").strip().lower()
+        
         for j in range(i + 1, len(risks)):
             if j in to_drop:
                 continue
-            ids_j = set(_TICKET_ID_PATTERN.findall(risks[j].get("explanation", "") + " " + risks[j].get("risk", "")))
-            cites_j = set(risks[j].get("citations", []))
+                
+            r_j = risks[j]
+            ids_j = set(_TICKET_ID_PATTERN.findall(r_j.get("explanation", "") + " " + r_j.get("risk", "")))
+            cites_j = set(r_j.get("citations", []))
+            title_j = r_j.get("risk", "").strip().lower()
+            
+            # Rule 1: Shared ticket IDs and overlapping citations (Your original rule)
             if ids_i and ids_j and (ids_i & ids_j) and (cites_i & cites_j):
                 to_drop.add(j if len(cites_i) >= len(cites_j) else i)
+            # Rule 2: Exact same risk title (Catches identical duplicates)
+            elif title_i and title_i == title_j:
+                to_drop.add(j if len(cites_i) >= len(cites_j) else i)
+            # Rule 3: Identical citations without ticket IDs (Catches renamed duplicates)
+            elif not ids_i and not ids_j and cites_i and cites_i == cites_j:
+                to_drop.add(j if len(cites_i) >= len(cites_j) else i)
+                
     return to_drop
 
 
 def _expand_citations_with_ticket_corroboration(risks: list[dict], chunks: list[dict]) -> list[dict]:
-    """
-    Guarantees the citation list includes every chunk that references the same specific
-    ticket ID the risk's own text already names.
-    """
+    """Guarantees the citation list includes every chunk referencing the same ticket ID."""
     for r in risks:
         ids_in_risk = set(_TICKET_ID_PATTERN.findall(r.get("explanation", "") + " " + r.get("risk", "")))
         if not ids_in_risk:
@@ -110,55 +158,67 @@ def _dedupe_same_ticket_risks(risks: list[dict]) -> list[dict]:
     drop = _find_duplicate_risk_indices(risks)
     return [r for i, r in enumerate(risks) if i not in drop]
 
-def _find_missed_contradiction_candidates(chunks: list[dict], risks: list[dict]) -> list[tuple[dict, dict]]:
-    """
-    Deterministic pre-check over the FULL evidence pool, independent of what
-    the first extraction pass found. A single large-context pass can miss a
-    real status-vs-problem pair even when the model would judge it correctly
-    if shown just those two chunks in isolation -- this finds every pair the
-    phrase lists flag as a candidate, so nothing depends on the model
-    noticing it unprompted.
-    """
-    status_chunks = [c for c in chunks if _chunk_text_has_any(c.get("text", ""), _STATUS_CLAIM_PHRASES)]
-    problem_chunks = [c for c in chunks if _chunk_text_has_any(c.get("text", ""), _CONTRADICTION_SIGNAL_PHRASES)]
 
-    already_covered = set()
-    for r in risks:
-        if r.get("is_contradiction"):
-            already_covered.update(r.get("citations", []))
+def _dedupe_contradiction_risks(risks: list[dict], chunks: list[dict]) -> list[dict]:
+    """Merges near-duplicate contradictions that share a status chunk + overlapping problem chunks."""
+    chunk_map = {c.get("chunk_id"): c for c in chunks}
 
-    candidates = []
-    for sc in status_chunks:
-        for pc in problem_chunks:
-            if sc["chunk_id"] == pc["chunk_id"]:
-                continue
-            if sc["chunk_id"] in already_covered and pc["chunk_id"] in already_covered:
-                continue  # first pass already produced a contradiction risk covering this pair
-            candidates.append((sc, pc))
-    return candidates
+    def classify(r: dict) -> tuple[set, set]:
+        cites = set(r.get("citations", []))
+        status = {c for c in cites if _chunk_text_has_any(
+            chunk_map.get(c, {}).get("text", ""), _STATUS_CLAIM_PHRASES)}
+        problem = {c for c in cites if _chunk_text_has_any(
+            chunk_map.get(c, {}).get("text", ""), _CONTRADICTION_SIGNAL_PHRASES)}
+        return status, problem
+
+    contradictions = [r for r in risks if r.get("is_contradiction")]
+    others = [r for r in risks if not r.get("is_contradiction")]
+
+    keep: list[dict] = []
+    for r in contradictions:
+        r_status, r_problem = classify(r)
+        if not r_status or not r_problem:
+            keep.append(r)
+            continue
+        duplicate = False
+        for k in keep:
+            k_status, k_problem = classify(k)
+            if (r_status & k_status) and (r_problem & k_problem):
+                if len(r.get("citations", [])) <= len(k.get("citations", [])):
+                    duplicate = True
+                    break
+        if not duplicate:
+            keep.append(r)
+
+    return others + keep
+
 
 def _find_missed_contradiction_candidate_groups(chunks: list[dict], risks: list[dict]):
     """
-    Groups problem chunks by ticket ID (same pattern _expand_citations_with_ticket_corroboration
-    already uses) before checking for a missed contradiction. A raw pairwise cross product
-    produced multiple near-duplicate risks about the same ticket -- grouping collapses those
-    into one targeted check per real underlying issue, while still guaranteeing every candidate
-    gets an explicit, isolated judgment instead of depending on the model to notice it in a
-    large context.
+    Groups problem chunks by ticket ID before checking for a missed contradiction.
+
+    Uses ONLY phrase-matched status chunks (no over-aggressive fallback). Coverage is
+    tracked per (status_chunk, problem_chunk) PAIR so a shared status chunk across two
+    distinct problem chunks never drops the second contradiction.
     """
     status_chunks = [c for c in chunks if _chunk_text_has_any(c.get("text", ""), _STATUS_CLAIM_PHRASES)]
     problem_chunks = [c for c in chunks if _chunk_text_has_any(c.get("text", ""), _CONTRADICTION_SIGNAL_PHRASES)]
     if not status_chunks or not problem_chunks:
         return []
 
-    already_covered = set()
+    covered_pairs: set[tuple[str, str]] = set()
     for r in risks:
-        if r.get("is_contradiction"):
-            already_covered.update(r.get("citations", []))
+        if not r.get("is_contradiction"):
+            continue
+        cites = set(r.get("citations", []))
+        for sc in status_chunks:
+            for pc in problem_chunks:
+                if sc["chunk_id"] in cites and pc["chunk_id"] in cites:
+                    covered_pairs.add((sc["chunk_id"], pc["chunk_id"]))
 
     groups: dict[str, list[dict]] = {}
     for pc in problem_chunks:
-        if pc["chunk_id"] in already_covered:
+        if all((sc["chunk_id"], pc["chunk_id"]) in covered_pairs for sc in status_chunks):
             continue
         ids = _TICKET_ID_PATTERN.findall(pc.get("text", "") or "")
         key = ids[0] if ids else f"__chunk__{pc['chunk_id']}"
@@ -191,116 +251,54 @@ def _call_llm_targeted_contradiction_check(status_chunks: list[dict], problem_ch
     except Exception as e:
         logger.exception("Targeted contradiction check failed: %s", e)
         return None
-    
+
+
 def analyse_risks(chunks: list[dict]) -> list[dict]:
     if not chunks:
         logger.info("No evidence chunks supplied for risk analysis.")
         return []
 
-    evidence_text = _format_evidence(chunks)
-    logger.info(
-        "Analysing %d evidence chunk(s) for delivery risks.",
-        len(chunks),
-    )
+    # Stable input ordering: makes dedup index-order comparisons insensitive to retrieval jitter.
+    chunks = sorted(chunks, key=lambda c: c.get("chunk_id", ""))
 
-    # ---------------------------------------------------------
-    # Pass 1: normal extraction
-    # ---------------------------------------------------------
+    evidence_text = _format_evidence(chunks)
+    logger.info("Analysing %d evidence chunk(s) for delivery risks.", len(chunks))
     parsed_response = _call_llm(evidence_text)
     risks = _parse_risks_response(parsed_response)
+    risks = _expand_citations_with_ticket_corroboration(risks, chunks)
 
-    risks = _expand_citations_with_ticket_corroboration(
-        risks,
-        chunks,
-    )
+    # Drop ungrounded contradictions from the first pass so they can't reject the report.
+    risks = [r for r in risks
+             if not r.get("is_contradiction") or _is_grounded_contradiction(r, chunks)]
 
-    # ---------------------------------------------------------
-    # Pass 2: targeted contradiction detection
-    # ---------------------------------------------------------
-    candidate_groups = _find_missed_contradiction_candidate_groups(
-        chunks,
-        risks,
-    )
-
+    candidate_groups = _find_missed_contradiction_candidate_groups(chunks, risks)
     for status_chunks, problem_chunks in candidate_groups:
-        forced = _call_llm_targeted_contradiction_check(
-            status_chunks,
-            problem_chunks,
-        )
-
+        forced = _call_llm_targeted_contradiction_check(status_chunks, problem_chunks)
         if not forced:
             continue
-
-        status_ids = {c["chunk_id"] for c in status_chunks}
-        problem_ids = {c["chunk_id"] for c in problem_chunks}
-
-        # If the first pass already found a contradiction involving
-        # the same status evidence, keep the first-pass risk.
-        # This prevents two descriptions of the same underlying
-        # contradiction from becoming two separate risks.
-        already_has_same_contradiction = False
-
-        for existing in risks:
-            if not existing.get("is_contradiction"):
-                continue
-
-            existing_citations = set(
-                existing.get("citations", [])
-            )
-
-            if existing_citations & status_ids:
-                already_has_same_contradiction = True
-                break
-
-        if already_has_same_contradiction:
-            logger.info(
-                "Skipping targeted contradiction because an existing "
-                "contradiction already covers the same status evidence "
-                "(status chunks: %s).",
-                ", ".join(sorted(status_ids)),
-            )
-            continue
-
-        logger.warning(
-            "First-pass extraction missed a contradiction "
-            "(problem chunk(s): %s)",
-            ", ".join(sorted(problem_ids)),
-        )
-
-        # IMPORTANT:
-        # Use ONLY the citations returned by the targeted LLM.
-        # Do NOT union every problem/status chunk here.
-        forced_citations = set(forced.citations)
-
-        # Make sure the targeted risk is grounded in the actual
-        # candidate evidence, but don't add unrelated chunks.
-        valid_chunk_ids = {
-            c["chunk_id"] for c in chunks
-        }
-
-        forced_citations &= valid_chunk_ids
-
-        risks.append({
+        forced_dict = {
             "risk": forced.risk,
             "explanation": forced.explanation,
-            "citations": sorted(forced_citations),
-            "impact_breakdown": (
-                forced.impact_breakdown.model_dump()
-            ),
+            "citations": forced.citations,
+            "impact_breakdown": forced.impact_breakdown.model_dump(),
             "confidence_tag": forced.confidence_tag,
             "is_sev1": forced.is_sev1,
-            "is_contradiction": True,
+            "is_contradiction": forced.is_contradiction,
             "recommendations": forced.recommendations,
-        })
+        }
+        # Only accept the forced contradiction if it is actually grounded in the
+        # cited chunks (status claim + problem signal). This is what stops the
+        # fabricated Atlas contradictions from rejecting the whole report.
+        if not _is_grounded_contradiction(forced_dict, chunks):
+            logger.info("Discarding ungrounded forced contradiction: %s", forced.risk)
+            continue
+        logger.warning(
+            "First-pass extraction missed a contradiction (problem chunk(s): %s)",
+            ", ".join(c["chunk_id"] for c in problem_chunks),
+        )
+        risks.append(forced_dict)
 
-    risks = _expand_citations_with_ticket_corroboration(
-        risks,
-        chunks,
-    )
-
-    logger.info(
-        "Extracted %d risk(s) before deduplication.",
-        len(risks),
-    )
-
-    return _dedupe_same_ticket_risks(risks)
+    logger.info("Extracted %d risk(s) before deduplication.", len(risks))
+    risks = _dedupe_same_ticket_risks(risks)
+    risks = _dedupe_contradiction_risks(risks, chunks)
+    return risks

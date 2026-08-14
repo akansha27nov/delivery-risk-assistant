@@ -1,6 +1,6 @@
 # Evaluation Notes — Ground Truth Comparison
 
-**Method:** One generated run per project (`samples/atlas_risk_report.md`, `samples/nova_risk_report.md`, 2026-08-13) checked against the planted answer key in `docs/ground_truth_risks.md`. This is a
+**Method:** One generated run per project (`samples/atlas_risk_report.md`, `samples/nova_risk_report.md`, 2026-08-14) checked against the planted answer key in `docs/ground_truth_risks.md`. This is a
 **single-run, directional comparison, not a statistical validation** — `seed=42` The LLM extraction step may vary between independent runs despite fixed temperature and seed settings. Treat findings below as "what one real run showed," not "what the system always does."
 
 ## Project Atlas
@@ -9,7 +9,7 @@
 |----|------|-----------|------------------------|-------|
 | R1 | ATL-142 blocked, threatens Aug 14 launch | Yes | Partial — 2 of 3 corroborating sources cited (`sprint_report.md`, `standup_transcript.txt`); `ticket_export.csv` not cited | Grounding still valid, just not exhaustive |
 | R2 | Uncontrolled mid-sprint scope addition | Yes | all 4 R2 source documents represented | - |
-| R3 | Attrition/retention signal (Sara) | **Not surfaced** in this run | n/a | No fabrication occurred — nothing worse than an omission. Worth a repeat run to check whether this sensitive, single-source case is being deprioritized against the top-3 cap, given the rubric weight this case is meant to carry |
+| R3 | Attrition/retention signal (Sara) | **Not surfaced** in this run | n/a | No fabrication occurred, single-source case is being deprioritized against the top-3 cap, given the rubric weight this case is meant to carry |
 | R4 | Declining velocity (38→29→22) + QA capacity gap | Partial | QA gap surfaced; the velocity trend numbers themselves never appear in the explanation text | Coverage gap, not a grounding failure — evidence existed and wasn't connected |
 
 **Insight:** Atlas: Successful top-3 ground-truth alignment. R1, R2 and R4 were surfaced. Citation coverage was strong but not always exhaustive; R3 was not surfaced in this run, which is an expected/interesting edge case under the top-3 constraint.

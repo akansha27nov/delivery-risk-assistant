@@ -142,11 +142,15 @@ def _format_telegram_alert(project: str, risks: list[dict]) -> str:
 def route_to_hitl(state: dict) -> dict:
     """Sends a Telegram alert when a high-severity risk or status contradiction is flagged."""
     project = state.get("project", "unknown")
-    risks = state.get("risks", state.get("result", {}).get("risks", []))
+    all_risks = state.get("risks", state.get("result", {}).get("risks", []))
     
-    telegram_message = _format_telegram_alert(project, risks)
+    hitl_risks = [
+        r for r in all_risks 
+        if r.get("is_sev1") is True or r.get("is_contradiction") is True
+    ]
     
-    # Track the actual outcome of the Telegram API call
+    telegram_message = _format_telegram_alert(project, hitl_risks)
+    
     ui_message = ""
     
     if TELEGRAM_ALERTS_ENABLED and TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
@@ -173,8 +177,8 @@ def route_to_hitl(state: dict) -> dict:
     state["requires_hitl"] = True
     state["result"] = {
         "status": "pending_hitl_approval",
-        "message": ui_message,  # Surfacing the actual delivery reality to the UI
-        "risks": risks
+        "message": ui_message,
+        "risks": all_risks
     }
     return state
 

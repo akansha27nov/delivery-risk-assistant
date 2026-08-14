@@ -14,7 +14,6 @@ from agent_analysis import (
     _dedupe_same_ticket_risks,
     _expand_citations_with_ticket_corroboration,
     _find_duplicate_risk_indices,
-    _find_missed_contradiction_candidates,
     _format_evidence,
     _parse_risks_response,
     analyse_risks,
@@ -44,7 +43,6 @@ __all__ = [
     "_has_grounded_status_claim",
     "_parse_risks_response",
     "_call_llm_targeted_contradiction_check",
-    "_find_missed_contradiction_candidates",
     "analyse_risks",
     "validate_citations",
 ]

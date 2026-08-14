@@ -104,9 +104,7 @@ See [`gtm_future_sprints.md`](gtm_future_sprints.md) for the complete Go-To-Mark
                     +------------------------------+
 ```
 
-![System Architecture](docs/architecture_diagram.svg)
-
-The **AI Delivery Risk Assistant** runs on a central **LangGraph** deterministic state machine (`graph.py`) that orchestrates retrieval, evaluation, and downstream reporting across multiple interfaces and integrations.
+The **AI Delivery Risk Assistant** runs on a central **LangGraph** deterministic state machine (`graph.py`) that orchestrates retrieval, evaluation, and downstream reporting across multiple interfaces and integrations. Please check [system architecture here](docs/architecture_diagram.svg)
 
 * **Entrypoints:**
   * **Streamlit UI:** Interactive dashboard for uploading documents, inspecting chunks, and running audits (`app/ui.py`).
@@ -122,9 +120,8 @@ The **AI Delivery Risk Assistant** runs on a central **LangGraph** deterministic
 
 ---
 ### 🔄 Execution Flow & Decision Tree
-![Workflow Diagram](docs/workflow_diagram.png)
 
-The underlying graph executes through a strict, node-based decision tree to prevent hallucinated risks and enforce safety gates:
+The underlying [Workflow Diagram](docs/workflow_diagram.png) executes through a strict, node-based decision tree to prevent hallucinated risks and enforce safety gates:
 
 1. **Retrieval Gate (`retrieve_documents`):** Checks if candidate evidence exists for the prompt. If none is found, it terminates early at `ask_for_more_documents`.
 2. **Analysis & Citation Validation (`analyse_risks` → `validate_citations`):** Extracts risks with source citations. If citation validation fails (unsupported or hallucinated claims), the graph routes to `reject_response`.

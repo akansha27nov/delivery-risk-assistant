@@ -11,6 +11,7 @@ from agent_models import ImpactBreakdown, RiskExtractionResponse, RiskItem
 from agent_analysis import (
     _call_llm,
     _call_llm_targeted_contradiction_check,
+    client,
     _dedupe_same_ticket_risks,
     _expand_citations_with_ticket_corroboration,
     _find_duplicate_risk_indices,
@@ -43,6 +44,7 @@ __all__ = [
     "_has_grounded_status_claim",
     "_parse_risks_response",
     "_call_llm_targeted_contradiction_check",
+    "client",
     "analyse_risks",
     "validate_citations",
 ]

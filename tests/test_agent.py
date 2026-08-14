@@ -98,7 +98,7 @@ def test_analyse_risks_mocked(mock_parse):
     )
     mock_parse.return_value.choices[0].message.parsed = mock_response
 
-    chunks = [{"chunk_id": "sprint_report.md::chunk2", "location": "sprint_report.md", "text": "Blocked."}]
+    chunks = [{"chunk_id": "sprint_report.md::chunk2", "location": "sprint_report.md", "text": "Status is green, but the ticket is blocked."}]
     result = analyse_risks(chunks)
 
     assert len(result) == 1

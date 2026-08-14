@@ -37,9 +37,8 @@ The system programmatically generates executive markdown reports in the `samples
 
 ## 🎥 Demo Assets
 
-- **Demo recording:** [`docs/Demo_recording.mov`](docs/Demo_recording.mov)
+- **Demo recording:** [`demo_recording.mov`](https://docs.google.com/presentation/d/1ZYCJ6ScpqKs9wYU-YQi_pPyOKsvRL28zBnUs2gTPEjA/edit?slide=id.p1#slide=id.p1)
 - **Slide deck (PDF):** [`docs/AI_Delivery_Risk_Assistant_Deck.pdf`](docs/AI_Delivery_Risk_Assistant_Deck.pdf)
-- **Slide deck (PPTX):** [`docs/AI_Delivery_Risk_Assistant_Deck.pptx`](docs/AI_Delivery_Risk_Assistant_Deck.pptx)
 
 ---
 

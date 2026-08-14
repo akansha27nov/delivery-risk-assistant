@@ -7,4 +7,3 @@ tests/__pycache__/*.pyc
 app/__pycache__/*.pyc
 logs/*.log
 logs/
-docs/Demo_recording.mov

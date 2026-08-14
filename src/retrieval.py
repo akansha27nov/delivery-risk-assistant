@@ -15,22 +15,24 @@ actual question so final ordering still reflects real relevance, not
 just angle membership.
 
 """
+
 import asyncio
-import os
+
 from dotenv import load_dotenv
 from openai import OpenAI
 from pinecone import Pinecone
+
 from config import (
+    DEFAULT_TOP_K,
+    EMBEDDING_MODEL,
+    FINAL_TOP_N,
     OPENAI_API_KEY,
     PINECONE_API_KEY,
     PINECONE_INDEX_NAME,
-    EMBEDDING_MODEL,
     RISK_ANGLES,
-    DEFAULT_TOP_K,
-    FINAL_TOP_N     
 )
-from rerank import rerank 
 from logger import get_logger
+from rerank import rerank
 
 load_dotenv()
 
@@ -56,47 +58,53 @@ def _get_index():
         _index = pc.Index(PINECONE_INDEX_NAME)
     return _index
 
-async def query_single_angle(angle: str, query: str, namespace: str, top_k: int = DEFAULT_TOP_K):
+
+async def query_single_angle(
+    angle: str, query: str, namespace: str, top_k: int = DEFAULT_TOP_K
+):
     """Query Pinecone asynchronously for a single risk angle."""
-    # Note: Pinecone's standard SDK is synchronous, so we run it in an executor 
+    # Note: Pinecone's standard SDK is synchronous, so we run it in an executor
     # or use its async client if available. Here we wrap the query block.
     loop = asyncio.get_running_loop()
-    
+
     def _pinecone_call():
         logger.debug("Retrieving angle '%s' for namespace '%s'.", angle, namespace)
         response = client.embeddings.create(
-            input=f"{query} regarding {angle}",
-            model=EMBEDDING_MODEL
+            input=f"{query} regarding {angle}", model=EMBEDDING_MODEL
         )
         vector = response.data[0].embedding
         return _get_index().query(
-            vector=vector,
-            top_k=top_k,
-            namespace=namespace,
-            include_metadata=True
+            vector=vector, top_k=top_k, namespace=namespace, include_metadata=True
         )
 
     res = await loop.run_in_executor(None, _pinecone_call)
     chunks = []
     for match in res.get("matches", []):
         meta = match.get("metadata", {})
-        chunks.append({
-            "chunk_id": match.get("id"),
-            "text": meta.get("text"),
-            "location": meta.get("location"),
-            "score": match.get("score")
-        })
+        chunks.append(
+            {
+                "chunk_id": match.get("id"),
+                "text": meta.get("text"),
+                "location": meta.get("location"),
+                "score": match.get("score"),
+            }
+        )
     logger.debug("Angle '%s' returned %d chunk(s).", angle, len(chunks))
     return chunks
+
 
 async def gather_evidence_async(project: str, query: str) -> list:
     """Gathers evidence across all risk angles concurrently using asyncio."""
     namespace = project.lower()
-    logger.info("Gathering evidence for project '%s' across %d angle(s).", namespace, len(RISK_ANGLES))
-    
+    logger.info(
+        "Gathering evidence for project '%s' across %d angle(s).",
+        namespace,
+        len(RISK_ANGLES),
+    )
+
     tasks = [query_single_angle(angle, query, namespace) for angle in RISK_ANGLES]
     results = await asyncio.gather(*tasks)
-    
+
     seen = set()
     unique_chunks = []
     for angle_chunks in results:
@@ -104,11 +112,20 @@ async def gather_evidence_async(project: str, query: str) -> list:
             if chunk["chunk_id"] not in seen:
                 seen.add(chunk["chunk_id"])
                 unique_chunks.append(chunk)
-                
+
     # FIX: Use the imported FINAL_TOP_N (8) for the validated pipeline threshold
     reranked_chunks = rerank(query, unique_chunks, top_n=FINAL_TOP_N)
-    logger.info("Gathered %d unique chunk(s); reranked to %d chunk(s).", len(unique_chunks), len(reranked_chunks))
+    logger.info(
+        "Gathered %d unique chunk(s); reranked to %d chunk(s).",
+        len(unique_chunks),
+        len(reranked_chunks),
+    )
     for c in reranked_chunks:
-        logger.info("  → %s (chunk_id=%s, rerank_score=%.3f)", c.get("location"), c.get("chunk_id"), c.get("rerank_score"))
+        logger.info(
+            "  → %s (chunk_id=%s, rerank_score=%.3f)",
+            c.get("location"),
+            c.get("chunk_id"),
+            c.get("rerank_score"),
+        )
 
     return reranked_chunks

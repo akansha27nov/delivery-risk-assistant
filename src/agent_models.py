@@ -1,23 +1,35 @@
-from typing import List, Optional
-
 from pydantic import BaseModel, Field, field_validator
 
 VALID_CONFIDENCE_TAGS = {"estimated_from_source_data", "directional_estimate"}
 
 
 class ImpactBreakdown(BaseModel):
-    delivery_impact: str = Field(description="Impact on project timelines, milestones, or deliverables.")
-    customer_impact: str = Field(description="Impact on end-users, stakeholders, or external partners.")
-    business_impact: str = Field(description="Impact on revenue, compliance, or strategic business goals.")
-    team_impact: str = Field(description="Impact on engineering capacity, morale, or workload.")
+    delivery_impact: str = Field(
+        description="Impact on project timelines, milestones, or deliverables."
+    )
+    customer_impact: str = Field(
+        description="Impact on end-users, stakeholders, or external partners."
+    )
+    business_impact: str = Field(
+        description="Impact on revenue, compliance, or strategic business goals."
+    )
+    team_impact: str = Field(
+        description="Impact on engineering capacity, morale, or workload."
+    )
 
 
 class RiskItem(BaseModel):
     risk: str = Field(description="Concise title or summary of the delivery risk.")
-    explanation: str = Field(description="Detailed explanation of why this is a risk based on evidence.")
-    citations: List[str] = Field(description="List of exact chunk IDs supporting this claim.")
-    impact_breakdown: ImpactBreakdown = Field(description="Structured breakdown of the risk's impact.")
-    confidence_tag: Optional[str] = Field(
+    explanation: str = Field(
+        description="Detailed explanation of why this is a risk based on evidence."
+    )
+    citations: list[str] = Field(
+        description="List of exact chunk IDs supporting this claim."
+    )
+    impact_breakdown: ImpactBreakdown = Field(
+        description="Structured breakdown of the risk's impact."
+    )
+    confidence_tag: str | None = Field(
         default=None,
         description=(
             "Set to 'estimated_from_source_data' ONLY if a specific figure, ticket "
@@ -51,4 +63,6 @@ class RiskItem(BaseModel):
 
 
 class RiskExtractionResponse(BaseModel):
-    risks: List[RiskItem] = Field(description="List of extracted delivery risks meeting criteria.")
+    risks: list[RiskItem] = Field(
+        description="List of extracted delivery risks meeting criteria."
+    )

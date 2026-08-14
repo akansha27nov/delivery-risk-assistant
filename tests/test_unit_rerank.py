@@ -1,11 +1,12 @@
 # tests/test_unit_rerank.py
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import rerank
+
 
 def test_rerank_empty_chunks():
     """Verify rerank returns an empty list immediately when given no chunks."""
@@ -28,16 +29,18 @@ def test_rerank_success(mock_cohere_client):
     mock_client_inst.rerank.return_value = mock_response
 
     with patch.object(rerank, "co", mock_client_inst):
-        chunks = [{
-            "chunk_id": "c1",
-            "source": "charter.md",
-            "location": "charter.md — Sec 1",
-            "text": "Launch date is on track.",
-            "project": "atlas"
-        }]
+        chunks = [
+            {
+                "chunk_id": "c1",
+                "source": "charter.md",
+                "location": "charter.md — Sec 1",
+                "text": "Launch date is on track.",
+                "project": "atlas",
+            }
+        ]
 
         output = rerank.rerank("Is launch on track?", chunks, top_n=5)
-        
+
         assert len(output) == 1
         assert output[0]["rerank_score"] == 0.95
         assert output[0]["chunk_id"] == "c1"

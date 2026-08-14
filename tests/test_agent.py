@@ -1,24 +1,28 @@
 import os
 import sys
-import pytest
 from unittest.mock import patch
+
 # Ensure the src directory is in the Python path so 'agent' can be found
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
 from agent import (
-    _format_evidence,
-    _parse_risks_response,
-    validate_citations,
-    analyse_risks,
+    ImpactBreakdown,
     RiskExtractionResponse,
     RiskItem,
-    ImpactBreakdown
+    _format_evidence,
+    analyse_risks,
+    validate_citations,
 )
+
 
 def test_format_evidence():
     """Test pure formatting of evidence chunks."""
     chunks = [
-        {"chunk_id": "sprint_report.md::chunk1", "location": "sprint_report.md", "text": "Velocity is down."}
+        {
+            "chunk_id": "sprint_report.md::chunk1",
+            "location": "sprint_report.md",
+            "text": "Velocity is down.",
+        }
     ]
     result = _format_evidence(chunks)
     assert "chunk_id: sprint_report.md::chunk1" in result
@@ -37,20 +41,21 @@ def test_validate_citations_valid():
                 "delivery_impact": "Delay",
                 "customer_impact": "None",
                 "business_impact": "None",
-                "team_impact": "Fatigue"
+                "team_impact": "Fatigue",
             },
             "confidence_tag": "directional_estimate",
             "is_sev1": False,
-            "is_contradiction": False
+            "is_contradiction": False,
         }
     ]
     evidence = [{"chunk_id": "sprint_report.md::chunk1", "rerank_score": 0.95}]
     validated = validate_citations(risks, evidence)
-    
+
     assert validated[0]["valid"] is True
     assert validated[0]["citations"] == ["sprint_report.md::chunk1"]
     assert "evidence_confidence" in validated[0]
     assert 10 <= validated[0]["evidence_confidence"] <= 99
+
 
 def test_validate_citations_missing_required_fields():
     """Test that a risk fails validation if impact_breakdown or confidence_tag is missing."""
@@ -62,12 +67,12 @@ def test_validate_citations_missing_required_fields():
             "impact_breakdown": None,
             "confidence_tag": None,
             "is_sev1": False,
-            "is_contradiction": False
+            "is_contradiction": False,
         }
     ]
     evidence = [{"chunk_id": "sprint_report.md::chunk1"}]
     validated = validate_citations(risks, evidence)
-    
+
     assert validated[0]["valid"] is False
 
 
@@ -84,21 +89,27 @@ def test_analyse_risks_mocked(mock_parse):
                     delivery_impact="Delayed partner launch",
                     customer_impact="Partner dissatisfaction",
                     business_impact="Missed Q3 revenue target",
-                    team_impact="Overtime required"
+                    team_impact="Overtime required",
                 ),
                 confidence_tag="directional_estimate",
                 is_sev1=False,
                 is_contradiction=True,
                 recommendations=[
                     "Escalate blocked ticket to engineering manager",
-                    "Update status report to Amber"
-                ]
+                    "Update status report to Amber",
+                ],
             )
         ]
     )
     mock_parse.return_value.choices[0].message.parsed = mock_response
 
-    chunks = [{"chunk_id": "sprint_report.md::chunk2", "location": "sprint_report.md", "text": "Status is green, but the ticket is blocked."}]
+    chunks = [
+        {
+            "chunk_id": "sprint_report.md::chunk2",
+            "location": "sprint_report.md",
+            "text": "Status is green, but the ticket is blocked.",
+        }
+    ]
     result = analyse_risks(chunks)
 
     assert len(result) == 1

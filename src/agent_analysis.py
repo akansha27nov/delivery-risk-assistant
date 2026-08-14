@@ -13,17 +13,18 @@ LLM-backed risk extraction helpers.
 """
 
 import re
-from typing import Optional
+
 from openai import OpenAI
-from config import OPENAI_API_KEY, LLM_MODEL
-from logger import get_logger
-from prompts import SYSTEM_PROMPT
+
 from agent_models import RiskExtractionResponse
 from agent_validation import (
-    _chunk_text_has_any,
-    _STATUS_CLAIM_PHRASES,
     _CONTRADICTION_SIGNAL_PHRASES,
+    _STATUS_CLAIM_PHRASES,
+    _chunk_text_has_any,
 )
+from config import LLM_MODEL, OPENAI_API_KEY
+from logger import get_logger
+from prompts import SYSTEM_PROMPT
 
 logger = get_logger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
@@ -35,14 +36,19 @@ def _format_evidence(chunks: list[dict]) -> str:
     """Pure formatting, no LLM call -- testable on its own."""
     blocks = []
     for c in chunks:
-        blocks.append(f"chunk_id: {c['chunk_id']}\nsource: {c['location']}\ntext: {c['text']}")
+        blocks.append(
+            f"chunk_id: {c['chunk_id']}\nsource: {c['location']}\ntext: {c['text']}"
+        )
     return "\n---\n".join(blocks)
 
 
-def _call_llm(evidence_text: str) -> Optional[RiskExtractionResponse]:
+def _call_llm(evidence_text: str) -> RiskExtractionResponse | None:
     """Calls OpenAI using structured outputs with Pydantic schema enforcement."""
     try:
-        logger.debug("Calling OpenAI structured extraction with %d characters of evidence.", len(evidence_text))
+        logger.debug(
+            "Calling OpenAI structured extraction with %d characters of evidence.",
+            len(evidence_text),
+        )
         completion = client.beta.chat.completions.parse(
             model=LLM_MODEL,
             temperature=0,
@@ -59,23 +65,25 @@ def _call_llm(evidence_text: str) -> Optional[RiskExtractionResponse]:
         return None
 
 
-def _parse_risks_response(parsed_response: Optional[RiskExtractionResponse]) -> list[dict]:
+def _parse_risks_response(parsed_response: RiskExtractionResponse | None) -> list[dict]:
     """Convert parsed Pydantic response object to list of dicts for LangGraph state compatibility."""
     if not parsed_response or not parsed_response.risks:
         return []
 
     parsed_risks = []
     for risk in parsed_response.risks:
-        parsed_risks.append({
-            "risk": risk.risk,
-            "explanation": risk.explanation,
-            "citations": risk.citations,
-            "impact_breakdown": risk.impact_breakdown.model_dump(),
-            "confidence_tag": risk.confidence_tag,
-            "is_sev1": risk.is_sev1,
-            "is_contradiction": risk.is_contradiction,
-            "recommendations": risk.recommendations,
-        })
+        parsed_risks.append(
+            {
+                "risk": risk.risk,
+                "explanation": risk.explanation,
+                "citations": risk.citations,
+                "impact_breakdown": risk.impact_breakdown.model_dump(),
+                "confidence_tag": risk.confidence_tag,
+                "is_sev1": risk.is_sev1,
+                "is_contradiction": risk.is_contradiction,
+                "recommendations": risk.recommendations,
+            }
+        )
     return parsed_risks
 
 
@@ -93,7 +101,9 @@ def _is_grounded_contradiction(risk: dict, chunks: list[dict]) -> bool:
         for c in cites
     )
     has_problem = any(
-        _chunk_text_has_any(chunk_map.get(c, {}).get("text", ""), _CONTRADICTION_SIGNAL_PHRASES)
+        _chunk_text_has_any(
+            chunk_map.get(c, {}).get("text", ""), _CONTRADICTION_SIGNAL_PHRASES
+        )
         for c in cites
     )
     return has_status and has_problem
@@ -108,38 +118,57 @@ def _find_duplicate_risk_indices(risks: list[dict]) -> set:
     for i in range(len(risks)):
         if i in to_drop:
             continue
-        
+
         r_i = risks[i]
-        ids_i = set(_TICKET_ID_PATTERN.findall(r_i.get("explanation", "") + " " + r_i.get("risk", "")))
+        ids_i = set(
+            _TICKET_ID_PATTERN.findall(
+                r_i.get("explanation", "") + " " + r_i.get("risk", "")
+            )
+        )
         cites_i = set(r_i.get("citations", []))
         title_i = r_i.get("risk", "").strip().lower()
-        
+
         for j in range(i + 1, len(risks)):
             if j in to_drop:
                 continue
-                
+
             r_j = risks[j]
-            ids_j = set(_TICKET_ID_PATTERN.findall(r_j.get("explanation", "") + " " + r_j.get("risk", "")))
+            ids_j = set(
+                _TICKET_ID_PATTERN.findall(
+                    r_j.get("explanation", "") + " " + r_j.get("risk", "")
+                )
+            )
             cites_j = set(r_j.get("citations", []))
             title_j = r_j.get("risk", "").strip().lower()
-            
+
             # Rule 1: Shared ticket IDs and overlapping citations (Your original rule)
-            if ids_i and ids_j and (ids_i & ids_j) and (cites_i & cites_j):
+            if (
+                ids_i
+                and ids_j
+                and (ids_i & ids_j)
+                and (cites_i & cites_j)
+                or title_i
+                and title_i == title_j
+                or not ids_i
+                and not ids_j
+                and cites_i
+                and cites_i == cites_j
+            ):
                 to_drop.add(j if len(cites_i) >= len(cites_j) else i)
-            # Rule 2: Exact same risk title (Catches identical duplicates)
-            elif title_i and title_i == title_j:
-                to_drop.add(j if len(cites_i) >= len(cites_j) else i)
-            # Rule 3: Identical citations without ticket IDs (Catches renamed duplicates)
-            elif not ids_i and not ids_j and cites_i and cites_i == cites_j:
-                to_drop.add(j if len(cites_i) >= len(cites_j) else i)
-                
+
     return to_drop
 
 
-def _expand_citations_with_ticket_corroboration(risks: list[dict], chunks: list[dict]) -> list[dict]:
+def _expand_citations_with_ticket_corroboration(
+    risks: list[dict], chunks: list[dict]
+) -> list[dict]:
     """Guarantees the citation list includes every chunk referencing the same ticket ID."""
     for r in risks:
-        ids_in_risk = set(_TICKET_ID_PATTERN.findall(r.get("explanation", "") + " " + r.get("risk", "")))
+        ids_in_risk = set(
+            _TICKET_ID_PATTERN.findall(
+                r.get("explanation", "") + " " + r.get("risk", "")
+            )
+        )
         if not ids_in_risk:
             continue
         existing = set(r.get("citations", []))
@@ -165,10 +194,20 @@ def _dedupe_contradiction_risks(risks: list[dict], chunks: list[dict]) -> list[d
 
     def classify(r: dict) -> tuple[set, set]:
         cites = set(r.get("citations", []))
-        status = {c for c in cites if _chunk_text_has_any(
-            chunk_map.get(c, {}).get("text", ""), _STATUS_CLAIM_PHRASES)}
-        problem = {c for c in cites if _chunk_text_has_any(
-            chunk_map.get(c, {}).get("text", ""), _CONTRADICTION_SIGNAL_PHRASES)}
+        status = {
+            c
+            for c in cites
+            if _chunk_text_has_any(
+                chunk_map.get(c, {}).get("text", ""), _STATUS_CLAIM_PHRASES
+            )
+        }
+        problem = {
+            c
+            for c in cites
+            if _chunk_text_has_any(
+                chunk_map.get(c, {}).get("text", ""), _CONTRADICTION_SIGNAL_PHRASES
+            )
+        }
         return status, problem
 
     contradictions = [r for r in risks if r.get("is_contradiction")]
@@ -201,8 +240,16 @@ def _find_missed_contradiction_candidate_groups(chunks: list[dict], risks: list[
     tracked per (status_chunk, problem_chunk) PAIR so a shared status chunk across two
     distinct problem chunks never drops the second contradiction.
     """
-    status_chunks = [c for c in chunks if _chunk_text_has_any(c.get("text", ""), _STATUS_CLAIM_PHRASES)]
-    problem_chunks = [c for c in chunks if _chunk_text_has_any(c.get("text", ""), _CONTRADICTION_SIGNAL_PHRASES)]
+    status_chunks = [
+        c
+        for c in chunks
+        if _chunk_text_has_any(c.get("text", ""), _STATUS_CLAIM_PHRASES)
+    ]
+    problem_chunks = [
+        c
+        for c in chunks
+        if _chunk_text_has_any(c.get("text", ""), _CONTRADICTION_SIGNAL_PHRASES)
+    ]
     if not status_chunks or not problem_chunks:
         return []
 
@@ -218,7 +265,9 @@ def _find_missed_contradiction_candidate_groups(chunks: list[dict], risks: list[
 
     groups: dict[str, list[dict]] = {}
     for pc in problem_chunks:
-        if all((sc["chunk_id"], pc["chunk_id"]) in covered_pairs for sc in status_chunks):
+        if all(
+            (sc["chunk_id"], pc["chunk_id"]) in covered_pairs for sc in status_chunks
+        ):
             continue
         ids = _TICKET_ID_PATTERN.findall(pc.get("text", "") or "")
         key = ids[0] if ids else f"__chunk__{pc['chunk_id']}"
@@ -227,18 +276,25 @@ def _find_missed_contradiction_candidate_groups(chunks: list[dict], risks: list[
     return [(status_chunks, group) for group in groups.values()]
 
 
-def _call_llm_targeted_contradiction_check(status_chunks: list[dict], problem_chunks: list[dict]):
+def _call_llm_targeted_contradiction_check(
+    status_chunks: list[dict], problem_chunks: list[dict]
+):
     """Forces one explicit judgment per real underlying issue, not per raw chunk pair."""
     evidence_text = _format_evidence(status_chunks + problem_chunks)
     try:
         completion = client.beta.chat.completions.parse(
-            model=LLM_MODEL, temperature=0, seed=42,
+            model=LLM_MODEL,
+            temperature=0,
+            seed=42,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": (
-                    "Evidence -- determine ONLY whether any status-claim chunk here "
-                    f"contradicts the problem chunk(s) below, per Rule 4:\n\n{evidence_text}"
-                )},
+                {
+                    "role": "user",
+                    "content": (
+                        "Evidence -- determine ONLY whether any status-claim chunk here "
+                        f"contradicts the problem chunk(s) below, per Rule 4:\n\n{evidence_text}"
+                    ),
+                },
             ],
             response_format=RiskExtractionResponse,
         )
@@ -268,8 +324,11 @@ def analyse_risks(chunks: list[dict]) -> list[dict]:
     risks = _expand_citations_with_ticket_corroboration(risks, chunks)
 
     # Drop ungrounded contradictions from the first pass so they can't reject the report.
-    risks = [r for r in risks
-             if not r.get("is_contradiction") or _is_grounded_contradiction(r, chunks)]
+    risks = [
+        r
+        for r in risks
+        if not r.get("is_contradiction") or _is_grounded_contradiction(r, chunks)
+    ]
 
     candidate_groups = _find_missed_contradiction_candidate_groups(chunks, risks)
     for status_chunks, problem_chunks in candidate_groups:

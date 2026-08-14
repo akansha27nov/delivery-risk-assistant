@@ -17,6 +17,7 @@ import csv
 import io
 import json
 from pathlib import Path
+
 from logger import get_logger
 
 DATA_DIR = Path(__file__).parent.parent / "knowledge_base"
@@ -37,7 +38,9 @@ def _load_manifest(manifest_path: Path = MANIFEST_PATH) -> dict:
     return file_to_project
 
 
-def load_documents(data_dir: Path = DATA_DIR, manifest_path: Path = MANIFEST_PATH) -> list[dict]:
+def load_documents(
+    data_dir: Path = DATA_DIR, manifest_path: Path = MANIFEST_PATH
+) -> list[dict]:
     file_to_project = _load_manifest(manifest_path)
 
     documents = []
@@ -49,26 +52,30 @@ def load_documents(data_dir: Path = DATA_DIR, manifest_path: Path = MANIFEST_PAT
             raise ValueError(
                 f"'{path.name}' is in knowledge_base/ but not listed in "
                 f"project_manifest.json. Add it under the correct project's "
-                f"\"files\" list before loading."
+                f'"files" list before loading.'
             )
         project = file_to_project[path.name]
 
         if path.suffix in TEXT_EXTENSIONS:
-            documents.append({
-                "source": path.name,
-                "type": "text",
-                "content": path.read_text(encoding="utf-8"),
-                "project": project,
-            })
+            documents.append(
+                {
+                    "source": path.name,
+                    "type": "text",
+                    "content": path.read_text(encoding="utf-8"),
+                    "project": project,
+                }
+            )
         else:
             with path.open(encoding="utf-8") as f:
                 rows = list(csv.DictReader(f))
-            documents.append({
-                "source": path.name,
-                "type": "csv",
-                "rows": rows,
-                "project": project,
-            })
+            documents.append(
+                {
+                    "source": path.name,
+                    "type": "csv",
+                    "rows": rows,
+                    "project": project,
+                }
+            )
     return documents
 
 
@@ -84,7 +91,12 @@ def build_document_from_upload(filename: str, raw_content: str, project: str) ->
     """
     suffix = Path(filename).suffix.lower()
     if suffix in TEXT_EXTENSIONS:
-        return {"source": filename, "type": "text", "content": raw_content, "project": project}
+        return {
+            "source": filename,
+            "type": "text",
+            "content": raw_content,
+            "project": project,
+        }
     elif suffix in CSV_EXTENSIONS:
         rows = list(csv.DictReader(io.StringIO(raw_content)))
         return {"source": filename, "type": "csv", "rows": rows, "project": project}
@@ -100,6 +112,13 @@ if __name__ == "__main__":
     for d in docs:
         tag = f"[{d['project']}]"
         if d["type"] == "text":
-            logger.info("%s %s text %5d chars", f"{tag:<8}", f"{d['source']:<30}", len(d["content"]))
+            logger.info(
+                "%s %s text %5d chars",
+                f"{tag:<8}",
+                f"{d['source']:<30}",
+                len(d["content"]),
+            )
         else:
-            logger.info("%s %s csv  %5d rows", f"{tag:<8}", f"{d['source']:<30}", len(d["rows"]))
+            logger.info(
+                "%s %s csv  %5d rows", f"{tag:<8}", f"{d['source']:<30}", len(d["rows"])
+            )

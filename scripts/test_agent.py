@@ -30,7 +30,7 @@ parsed = _parse_risks_response(mock_response)
 print("Parsed Risk:", parsed[0])
 
 # 2. Test Citation Validation
-# We must include a dummy 'rerank_score' if your validator expects it, 
+# We must include a dummy 'rerank_score' if your validator expects it,
 # but simply matching the chunk_id is usually enough for the valid test.
 validated = validate_citations(parsed, [{"chunk_id": "chunk_1", "rerank_score": 0.9}])
 print("Validation Result (Valid Chunk):", validated[0]["valid"])

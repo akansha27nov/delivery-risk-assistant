@@ -1,5 +1,6 @@
 # src/config.py
 import os
+
 from dotenv import load_dotenv
 
 # Automatically load .env file
@@ -29,8 +30,8 @@ PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX", "delivery-risk-assistant")
 # ===========================================================
 MAX_CHUNK_CHARS = 600
 MIN_EVIDENCE_CHUNKS = 2
-DEFAULT_TOP_K = 5      
-FINAL_TOP_N = 8         # The final number of chunks to keep after reranking
+DEFAULT_TOP_K = 5
+FINAL_TOP_N = 8  # The final number of chunks to keep after reranking
 
 # ===========================================================
 # 🔍 Multi-Angle Retrieval Prompts

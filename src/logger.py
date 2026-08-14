@@ -2,9 +2,10 @@ import logging
 import sys
 from pathlib import Path
 
+
 def get_logger(name: str = "delivery_auditor") -> logging.Logger:
     logger = logging.getLogger(name)
-    
+
     # Prevent duplicate logs if get_logger is called multiple times
     if logger.handlers:
         return logger
@@ -15,7 +16,7 @@ def get_logger(name: str = "delivery_auditor") -> logging.Logger:
     # Format the log output
     formatter = logging.Formatter(
         fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
     # Console Handler (Prints to terminal)

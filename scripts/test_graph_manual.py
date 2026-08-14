@@ -1,8 +1,10 @@
 # src/test_graph_manual.py
 import asyncio
+
 from graph import build_graph
 
 QUESTION = "What are this week's top delivery risks?"
+
 
 async def test_full_graph():
     graph = build_graph()
@@ -23,6 +25,7 @@ async def test_full_graph():
         else:
             print(f"  Message: {result.get('message')}")
         print()
+
 
 if __name__ == "__main__":
     asyncio.run(test_full_graph())

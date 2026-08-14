@@ -1,12 +1,13 @@
 # tests/test_unit_graph.py
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import graph
 from graph import build_graph
+
 
 def test_build_graph_compiles_successfully():
     """Ensure the LangGraph state machine builds without errors."""
@@ -21,11 +22,11 @@ def test_graph_node_execution_and_routing(mock_run_agent):
     mock_run_agent.return_value = {
         "final_response": "Risk assessment complete.",
         "escalate": True,
-        "risks": [{"risk": "Delay", "severity": "High"}]
+        "risks": [{"risk": "Delay", "severity": "High"}],
     }
 
     workflow = build_graph()
-    
+
     initial_state = {
         "query": "Are there critical blockers?",
         "project": "atlas",
@@ -34,7 +35,7 @@ def test_graph_node_execution_and_routing(mock_run_agent):
         "chunks": [],
         "risks": [],
         "escalate": False,
-        "final_response": ""
+        "final_response": "",
     }
 
     # Invoke workflow with escalation enabled to test conditional edge branches
@@ -45,7 +46,12 @@ def test_graph_node_execution_and_routing(mock_run_agent):
         pass
 
     # Test individual node functions if exported or accessible on graph module
-    for node_name in ["retrieval_node", "agent_node", "evaluation_node", "should_escalate"]:
+    for node_name in [
+        "retrieval_node",
+        "agent_node",
+        "evaluation_node",
+        "should_escalate",
+    ]:
         node_func = getattr(graph, node_name, None)
         if callable(node_func):
             try:

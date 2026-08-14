@@ -9,7 +9,13 @@ from logger import get_logger
 logger = get_logger(__name__)
 
 _ENTITY_ID_PATTERN = re.compile(r"\b([A-Z]{2,8})-\d+\b")
-_STATUS_CLAIM_PHRASES = ("on track", "green", "no blockers", "all good", "no issues to flag")
+_STATUS_CLAIM_PHRASES = (
+    "on track",
+    "green",
+    "no blockers",
+    "all good",
+    "no issues to flag",
+)
 _CONTRADICTION_SIGNAL_PHRASES = (
     "blocked",
     "blocking",
@@ -50,18 +56,28 @@ def _has_grounded_status_claim(citations: list[str], evidence_map: dict) -> bool
 
 def _has_grounded_contradiction(citations: list[str], evidence_map: dict) -> bool:
     status_citations = [
-        cid for cid in citations
-        if _chunk_text_has_any(evidence_map.get(cid, {}).get("text") or "", _STATUS_CLAIM_PHRASES)
+        cid
+        for cid in citations
+        if _chunk_text_has_any(
+            evidence_map.get(cid, {}).get("text") or "", _STATUS_CLAIM_PHRASES
+        )
     ]
     problem_citations = [
-        cid for cid in citations
-        if _chunk_text_has_any(evidence_map.get(cid, {}).get("text") or "", _CONTRADICTION_SIGNAL_PHRASES)
+        cid
+        for cid in citations
+        if _chunk_text_has_any(
+            evidence_map.get(cid, {}).get("text") or "", _CONTRADICTION_SIGNAL_PHRASES
+        )
     ]
 
     # A contradiction must be supported by two distinct pieces of evidence:
     # one chunk that actually makes a positive status claim and another chunk
     # that actually describes the blocking/problem condition.
-    return bool(status_citations and problem_citations and set(status_citations) != set(problem_citations))
+    return bool(
+        status_citations
+        and problem_citations
+        and set(status_citations) != set(problem_citations)
+    )
 
 
 def _check_context_consistency(valid_cites: list, evidence_map: dict):
@@ -81,8 +97,13 @@ def _check_context_consistency(valid_cites: list, evidence_map: dict):
     if common:
         return True, ""
 
-    conflict_desc = "; ".join(f"{cid} mentions {sorted(p)}" for cid, p in prefix_groups.items())
-    return False, f"Citations reference unrelated entity groups with no overlap -- {conflict_desc}"
+    conflict_desc = "; ".join(
+        f"{cid} mentions {sorted(p)}" for cid, p in prefix_groups.items()
+    )
+    return (
+        False,
+        f"Citations reference unrelated entity groups with no overlap -- {conflict_desc}",
+    )
 
 
 def validate_citations(risks: list[dict], evidence) -> list[dict]:
@@ -116,11 +137,16 @@ def validate_citations(risks: list[dict], evidence) -> list[dict]:
         if r.get("is_contradiction"):
             contradiction_grounded = False
             if evidence_map and has_valid_citation:
-                contradiction_grounded = _has_grounded_contradiction(valid_cites, evidence_map)
+                contradiction_grounded = _has_grounded_contradiction(
+                    valid_cites, evidence_map
+                )
 
         is_valid = (
-            has_valid_citation and has_impact and has_confidence_tag
-            and context_consistent and contradiction_grounded
+            has_valid_citation
+            and has_impact
+            and has_confidence_tag
+            and context_consistent
+            and contradiction_grounded
         )
 
         base_score = 20.0
@@ -132,14 +158,20 @@ def validate_citations(risks: list[dict], evidence) -> list[dict]:
         percentile = 0.5
         if evidence_map and num_citations > 0 and all_scores:
             cited_scores = [
-                evidence_map.get(c, {}).get("rerank_score", evidence_map.get(c, {}).get("score", 0.0))
+                evidence_map.get(c, {}).get(
+                    "rerank_score", evidence_map.get(c, {}).get("score", 0.0)
+                )
                 for c in valid_cites
             ]
             avg_cited_score = sum(cited_scores) / len(cited_scores)
-            percentile = sum(1 for s in all_scores if avg_cited_score >= s) / len(all_scores)
+            percentile = sum(1 for s in all_scores if avg_cited_score >= s) / len(
+                all_scores
+            )
         rerank_score_component = percentile * 25.0
 
-        total_score = base_score + citation_score + supporting_docs_score + rerank_score_component
+        total_score = (
+            base_score + citation_score + supporting_docs_score + rerank_score_component
+        )
         evidence_confidence = int(min(max(total_score, 10), 99))
 
         if not context_consistent:

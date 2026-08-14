@@ -1,7 +1,9 @@
 import streamlit as st
 
+
 def apply_custom_theme():
-    st.markdown("""
+    st.markdown(
+        """
     <style>
     /* 1. Base Fonts from Design System */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
@@ -158,4 +160,6 @@ def apply_custom_theme():
         color: #1b1b1d !important;
     }
     </style>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )

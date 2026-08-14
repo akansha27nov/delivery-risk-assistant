@@ -1,5 +1,5 @@
 """
-Rerank the chunks returned by retrieval using Cohere Rerank, so the agent reasons 
+Rerank the chunks returned by retrieval using Cohere Rerank, so the agent reasons
 over the most relevant evidence first - not just the highest cosine-similarity matches,
 which can rank a "no blockers" chunk above an actual blocked-ticket chunk purely on surface wording overlap.
 """
@@ -8,6 +8,7 @@ import os
 
 import cohere
 from dotenv import load_dotenv
+
 from logger import get_logger
 
 load_dotenv()
@@ -49,19 +50,27 @@ def rerank(query: str, chunks: list[dict], top_n: int = 5) -> list[dict]:
     return reranked
 
 
-if __name__ == "__main__":      # pragma: no cover
+if __name__ == "__main__":  # pragma: no cover
     import asyncio
+
     from retrieval import query_single_angle
 
     async def test_reranking_standalone():
         query = "Is anything blocking the launch?"
         for project in ["atlas", "nova"]:
             # Fetch a raw pool of candidates to test the reranker
-            candidates = await query_single_angle("blockers", query, namespace=project, top_k=8)
+            candidates = await query_single_angle(
+                "blockers", query, namespace=project, top_k=8
+            )
             top = rerank(query, candidates, top_n=5)
 
             logger.info("=== Project: %s ===", project)
-            logger.info("Reranked top %d of %d candidates for: '%s'", len(top), len(candidates), query)
+            logger.info(
+                "Reranked top %d of %d candidates for: '%s'",
+                len(top),
+                len(candidates),
+                query,
+            )
             for c in top:
                 logger.info("[%s] rerank_score=%.3f", c["location"], c["rerank_score"])
                 logger.info("%s...", c["text"][:100])

@@ -2,18 +2,17 @@
 Embed chunks (OpenAI) and store them in Pinecone.
 """
 
-import os
 from dotenv import load_dotenv
 from openai import OpenAI
 from pinecone import Pinecone, ServerlessSpec
+
 from config import (
+    EMBEDDING_DIM,
+    EMBEDDING_MODEL,
     OPENAI_API_KEY,
     PINECONE_API_KEY,
     PINECONE_INDEX_NAME,
-    EMBEDDING_MODEL,
-    EMBEDDING_DIM
 )
-from rerank import rerank 
 from logger import get_logger
 
 load_dotenv()
@@ -60,7 +59,7 @@ def _cleanup_default_namespace(index):
 def _upsert_chunks(index, chunks: list[dict], project: str, batch_size: int = 50):
     """Shared embed+upsert loop, used by both a full rebuild and a live single-doc add."""
     for i in range(0, len(chunks), batch_size):
-        batch = chunks[i:i + batch_size]
+        batch = chunks[i : i + batch_size]
         vectors = _embed([c["text"] for c in batch])
         index.upsert(
             vectors=[
@@ -98,7 +97,11 @@ def build_vector_store(chunks: list[dict], batch_size: int = 50):
     projects = sorted(set(c["project"] for c in chunks))
 
     for project in projects:
-        logger.info("Rebuilding Pinecone namespace '%s' with %d chunk(s).", project, sum(1 for c in chunks if c["project"] == project))
+        logger.info(
+            "Rebuilding Pinecone namespace '%s' with %d chunk(s).",
+            project,
+            sum(1 for c in chunks if c["project"] == project),
+        )
         project_chunks = [c for c in chunks if c["project"] == project]
 
         try:
@@ -124,7 +127,9 @@ def add_document_to_project(chunks: list[dict], project: str, batch_size: int = 
     instead of rebuilding the whole demo corpus from knowledge_base/.
     """
     index = _ensure_index()
-    logger.info("Adding %d new chunk(s) to Pinecone namespace '%s'.", len(chunks), project)
+    logger.info(
+        "Adding %d new chunk(s) to Pinecone namespace '%s'.", len(chunks), project
+    )
     _upsert_chunks(index, chunks, project, batch_size)
     return index
 
@@ -134,7 +139,7 @@ def get_index():
     return pc.Index(INDEX_NAME)
 
 
-if __name__ == "__main__":    # pragma: no cover
+if __name__ == "__main__":  # pragma: no cover
     from chunking import chunk_documents
     from ingestion import load_documents
 
@@ -152,7 +157,14 @@ if __name__ == "__main__":    # pragma: no cover
     query_vec = _embed([query])[0]
     for project in stats["namespaces"]:
         logger.info("Sanity check — '%s' (namespace: %s):", query, project)
-        result = index.query(vector=query_vec, top_k=3, include_metadata=True, namespace=project)
+        result = index.query(
+            vector=query_vec, top_k=3, include_metadata=True, namespace=project
+        )
         for match in result["matches"]:
             meta = match["metadata"]
-            logger.info("[%s] score=%.3f %s...", meta["location"], match["score"], meta["text"][:100])
+            logger.info(
+                "[%s] score=%.3f %s...",
+                meta["location"],
+                match["score"],
+                meta["text"][:100],
+            )
